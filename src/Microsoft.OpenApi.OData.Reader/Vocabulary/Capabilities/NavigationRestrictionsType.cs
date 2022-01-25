@@ -121,6 +121,11 @@ namespace Microsoft.OpenApi.OData.Vocabulary.Capabilities
         /// Restrictions for retrieving entities.
         /// </summary>
         public ReadRestrictionsType ReadRestrictions { get; set; }
+        
+        /// <summary>
+        /// Restrictions for creating $ref paths
+        /// </summary>
+        public bool? Referenceable { get; set; }
 
         /// <summary>
         /// Init the <see cref="NavigationPropertyRestriction"/>.
@@ -180,6 +185,9 @@ namespace Microsoft.OpenApi.OData.Vocabulary.Capabilities
 
             // ReadRestrictions
             ReadRestrictions = record.GetRecord<ReadRestrictionsType>("ReadRestrictions");
+
+            // Referenceable
+            Referenceable = record.GetBoolean("Referenceable");
         }
     }
 

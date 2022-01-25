@@ -355,17 +355,17 @@ namespace Microsoft.OpenApi.OData.Edm
                 return;
             }
 
+            NavigationPropertyRestriction restriction = navigation?.RestrictedProperties?.FirstOrDefault();
+
             // Whether to expand the navigation property
             bool shouldExpand = navigationProperty.ContainsTarget;
 
             // append a navigation property.
             currentPath.Push(new ODataNavigationPropertySegment(navigationProperty));
             AppendPath(currentPath.Clone());
-            visitedNavigationProperties.Push(navPropFullyQualifiedName);
+            visitedNavigationProperties.Push(navPropFullyQualifiedName);                                  
 
             // Check whether a collection-valued navigation property should be indexed by key value(s).
-            NavigationPropertyRestriction restriction = navigation?.RestrictedProperties?.FirstOrDefault();
-
             if (restriction == null || restriction.IndexableByKey == true)
             {
                 IEdmEntityType navEntityType = navigationProperty.ToEntityType();
@@ -386,7 +386,7 @@ namespace Microsoft.OpenApi.OData.Edm
                 // ~/entityset/{key}/single-valued-Nav/subtype
                 CreateTypeCastPaths(currentPath, convertSettings, navigationProperty.DeclaringType, navigationProperty, targetsMany);
 
-                if (!navigationProperty.ContainsTarget)
+                if (restriction?.Referenceable == true)
                 {
                     // Non-Contained
                     // Single-Valued: ~/entityset/{key}/single-valued-Nav/$ref
@@ -446,33 +446,6 @@ namespace Microsoft.OpenApi.OData.Edm
             currentPath.Pop();
             visitedNavigationProperties.Pop();
         }              
-
-        /// <summary>
-        /// Evaluates whether to expand a navigation property based off of a custom attribute value
-        /// specified for this navigation property.
-        /// </summary>
-        /// <param name="navigationProperty">The navigation property.</param>
-        /// <param name="convertSettings">The settings for the current conversion. This is used to retrieve the name of the custom attribute.</param>
-        /// <returns>true or false</returns>
-        private bool ShouldExpandNavigationProperty(IEdmNavigationProperty navigationProperty, OpenApiConvertSettings convertSettings)
-        {
-            Debug.Assert(navigationProperty != null);
-            Debug.Assert(convertSettings != null);
-
-            var customAttribute = _model.DirectValueAnnotationsManager.GetDirectValueAnnotations(navigationProperty)?
-                .Where(x => x.Name.Equals(convertSettings.ExpandNavigationPropertyAttributeName, StringComparison.Ordinal))?
-                .FirstOrDefault()?.Value as EdmStringConstant;
-
-            var customAttributeValue = customAttribute?.Value;
-
-            var expand = true;
-            if (!string.IsNullOrEmpty(customAttributeValue) && bool.TryParse(customAttributeValue, out bool result))
-            {
-                expand = result;
-            }
-
-            return expand;
-        }
 
         /// <summary>
         /// Create $ref paths.
