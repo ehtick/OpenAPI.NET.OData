@@ -208,6 +208,11 @@ namespace Microsoft.OpenApi.OData
         /// </summary>
         public bool EnableDeprecationInformation { get; set; } = true;
 
+        /// <summary>
+        /// Gets/sets a value indicating whether the error responses should be described as a default response or as 4XX and 5XX error responses.
+        /// </summary>
+        public bool ErrorResponsesAsDefault { get; set; } = true;
+
         internal OpenApiConvertSettings Clone()
         {
             var newSettings = new OpenApiConvertSettings
@@ -243,6 +248,7 @@ namespace Microsoft.OpenApi.OData
                 EnableODataTypeCast = this.EnableODataTypeCast,
                 RequireDerivedTypesConstraintForODataTypeCastSegments = this.RequireDerivedTypesConstraintForODataTypeCastSegments,
                 EnableDeprecationInformation = this.EnableDeprecationInformation,
+                ErrorResponsesAsDefault = this.ErrorResponsesAsDefault,
             };
 
             return newSettings;
