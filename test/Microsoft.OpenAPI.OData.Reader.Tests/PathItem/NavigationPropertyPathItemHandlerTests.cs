@@ -1,4 +1,4 @@
-﻿// ------------------------------------------------------------
+// ------------------------------------------------------------
 //  Copyright (c) Microsoft Corporation.  All rights reserved.
 //  Licensed under the MIT License (MIT). See LICENSE in the repo root for license information.
 // ------------------------------------------------------------
@@ -10,9 +10,11 @@ using System.Xml.Linq;
 using Microsoft.OData.Edm;
 using Microsoft.OData.Edm.Csdl;
 using Microsoft.OData.Edm.Validation;
+using Microsoft.OpenApi.Any;
 using Microsoft.OpenApi.Models;
 using Microsoft.OpenApi.OData.Edm;
 using Microsoft.OpenApi.OData.Properties;
+using Microsoft.OpenApi.OData.Tests;
 using Xunit;
 
 namespace Microsoft.OpenApi.OData.PathItem.Tests
@@ -59,16 +61,26 @@ namespace Microsoft.OpenApi.OData.PathItem.Tests
         [Theory]
         [InlineData(true, true, new OperationType[] { OperationType.Get, OperationType.Patch, OperationType.Delete })]
         [InlineData(true, false, new OperationType[] { OperationType.Get, OperationType.Post })]
-        [InlineData(false, true, new OperationType[] { OperationType.Get })]
+        [InlineData(false, true, new OperationType[] { OperationType.Get, OperationType.Delete })] // Deletablity explicitly set via annotation
         [InlineData(false, false, new OperationType[] { OperationType.Get})]
         public void CreateCollectionNavigationPropertyPathItemReturnsCorrectPathItem(bool containment, bool keySegment, OperationType[] expected)
         {
+            string annotation = 
+                containment ? 
+                "" : 
+                @"
+<Annotation Term=""Org.OData.Capabilities.V1.DeleteRestrictions"">
+  <Record>
+    <PropertyValue Property=""Deletable"" Bool=""true"" />
+  </Record>
+</Annotation>";
+            
             // Arrange
-            IEdmModel model = GetEdmModel("");
+            IEdmModel model = GetEdmModel(annotation: "", annotation2: annotation);
             ODataContext context = new ODataContext(model);
             IEdmEntitySet entitySet = model.EntityContainer.FindEntitySet("Customers");
             Assert.NotNull(entitySet); // guard
-            IEdmEntityType entityType = entitySet.EntityType();
+            IEdmEntityType entityType = entitySet.EntityType;
 
             IEdmNavigationProperty property = entityType.DeclaredNavigationProperties()
                 .FirstOrDefault(c => c.ContainsTarget == containment && c.TargetMultiplicity() == EdmMultiplicity.Many);
@@ -111,7 +123,7 @@ namespace Microsoft.OpenApi.OData.PathItem.Tests
             ODataContext context = new ODataContext(model, settings);
             IEdmEntitySet entitySet = model.EntityContainer.FindEntitySet("Customers");
             Assert.NotNull(entitySet); // guard
-            IEdmEntityType entityType = entitySet.EntityType();
+            IEdmEntityType entityType = entitySet.EntityType;
 
             IEdmNavigationProperty property = entityType.DeclaredNavigationProperties()
                 .FirstOrDefault(c => c.ContainsTarget == true && c.TargetMultiplicity() == EdmMultiplicity.Many);
@@ -145,7 +157,7 @@ namespace Microsoft.OpenApi.OData.PathItem.Tests
                 }
                 else
                 {
-                    Assert.Equal(1, pathItem.Parameters.Count); // Customer ID
+                    Assert.Single(pathItem.Parameters); // Customer ID
                 }
             }
             else
@@ -164,7 +176,7 @@ namespace Microsoft.OpenApi.OData.PathItem.Tests
             ODataContext context = new ODataContext(model);
             IEdmEntitySet entitySet = model.EntityContainer.FindEntitySet("Customers");
             Assert.NotNull(entitySet); // guard
-            IEdmEntityType entityType = entitySet.EntityType();
+            IEdmEntityType entityType = entitySet.EntityType;
 
             IEdmNavigationProperty property = entityType.DeclaredNavigationProperties()
                 .FirstOrDefault(c => c.ContainsTarget == containment && c.TargetMultiplicity() != EdmMultiplicity.Many);
@@ -206,7 +218,10 @@ namespace Microsoft.OpenApi.OData.PathItem.Tests
                 {
                     foreach (var enableAnnotation in new[] { true, false })
                     {
-                        yield return new object[] { enableAnnotation, path };
+                        foreach (var capabilitySupported in new[] { true, false })
+                        {
+                            yield return new object[] { enableAnnotation, path, capabilitySupported };
+                        }
                     }
                 }
             }
@@ -233,7 +248,10 @@ namespace Microsoft.OpenApi.OData.PathItem.Tests
                 {
                     foreach (var enableAnnotation in new[] { true, false })
                     {
-                        yield return new object[] { enableAnnotation, path };
+                        foreach (var capabilitySupported in new[] { true, false })
+                        {
+                            yield return new object[] { enableAnnotation, path, capabilitySupported };
+                        }
                     }
                 }
             }
@@ -242,7 +260,7 @@ namespace Microsoft.OpenApi.OData.PathItem.Tests
         [Theory]
         [MemberData(nameof(CollectionNavigationPropertyData))]
         [MemberData(nameof(SingleNavigationPropertyData))]
-        public void CreatePathItemForNavigationPropertyAndReadRestrictions(bool hasRestrictions, string navigationPropertyPath)
+        public void CreatePathItemForNavigationPropertyAndReadRestrictions(bool hasRestrictions, string navigationPropertyPath, bool readable)
         {
             // Arrange
             string annotation = String.Format(@"
@@ -254,14 +272,14 @@ namespace Microsoft.OpenApi.OData.PathItem.Tests
           <PropertyValue Property=""NavigationProperty"" NavigationPropertyPath=""{0}"" />
           <PropertyValue Property=""ReadRestrictions"" >
             <Record>
-              <PropertyValue Property=""Readable"" Bool=""false"" />
+              <PropertyValue Property=""Readable"" Bool=""{1}"" />
             </Record>
           </PropertyValue>
         </Record>
       </Collection>
     </PropertyValue>
   </Record>
-</Annotation>", navigationPropertyPath);
+</Annotation>", navigationPropertyPath, readable);
 
             IEdmModel model = GetEdmModel(hasRestrictions ? annotation : "");
             ODataContext context = new ODataContext(model);
@@ -279,7 +297,10 @@ namespace Microsoft.OpenApi.OData.PathItem.Tests
 
             if (hasRestrictions)
             {
-                Assert.DoesNotContain(pathItem.Operations, o => o.Key == OperationType.Get);
+                if (readable)
+                    Assert.Contains(pathItem.Operations, o => o.Key == OperationType.Get);
+                else
+                    Assert.DoesNotContain(pathItem.Operations, o => o.Key == OperationType.Get);
             }
             else
             {
@@ -289,7 +310,7 @@ namespace Microsoft.OpenApi.OData.PathItem.Tests
 
         [Theory]
         [MemberData(nameof(CollectionNavigationPropertyData))]
-        public void CreatePathItemForNavigationPropertyAndInsertRestrictions(bool hasRestrictions, string navigationPropertyPath)
+        public void CreatePathItemForNavigationPropertyAndInsertRestrictions(bool hasRestrictions, string navigationPropertyPath, bool insertable)
         {
             // Arrange
             string annotation = String.Format(@"
@@ -301,14 +322,14 @@ namespace Microsoft.OpenApi.OData.PathItem.Tests
           <PropertyValue Property=""NavigationProperty"" NavigationPropertyPath=""{0}"" />
           <PropertyValue Property=""InsertRestrictions"" >
             <Record>
-              <PropertyValue Property=""Insertable"" Bool=""false"" />
+              <PropertyValue Property=""Insertable"" Bool=""{1}"" />
             </Record>
           </PropertyValue>
         </Record>
       </Collection>
     </PropertyValue>
   </Record>
-</Annotation>", navigationPropertyPath);
+</Annotation>", navigationPropertyPath, insertable);
 
             IEdmModel model = GetEdmModel(hasRestrictions ? annotation : "");
             ODataContext context = new ODataContext(model);
@@ -329,13 +350,17 @@ namespace Microsoft.OpenApi.OData.PathItem.Tests
             bool isContainment = path.Segments.OfType<ODataNavigationPropertySegment>().Last().NavigationProperty.ContainsTarget;
 
             OperationType[] expected;
-            if (!isContainment || hasRestrictions)
+            if (hasRestrictions)
             {
-                expected = new[] { OperationType.Get };
+                expected = insertable
+                    ? (new[] { OperationType.Get, OperationType.Post })
+                    : (new[] { OperationType.Get });
             }
             else
             {
-                expected = new[] { OperationType.Get, OperationType.Post };
+                expected = isContainment
+                    ? (new[] { OperationType.Get, OperationType.Post })
+                    : (new[] { OperationType.Get });
             }
 
             Assert.Equal(expected, pathItem.Operations.Select(o => o.Key));
@@ -344,7 +369,7 @@ namespace Microsoft.OpenApi.OData.PathItem.Tests
         [Theory]
         [MemberData(nameof(CollectionNavigationPropertyData))]
         [MemberData(nameof(SingleNavigationPropertyData))]
-        public void CreatePathItemForNavigationPropertyAndUpdateRestrictions(bool hasRestrictions, string navigationPropertyPath)
+        public void CreatePathItemForNavigationPropertyAndUpdateRestrictions(bool hasRestrictions, string navigationPropertyPath, bool updatable)
         {
             // Arrange
             string annotation = String.Format(@"
@@ -356,14 +381,14 @@ namespace Microsoft.OpenApi.OData.PathItem.Tests
           <PropertyValue Property=""NavigationProperty"" NavigationPropertyPath=""{0}"" />
           <PropertyValue Property=""UpdateRestrictions"" >
             <Record>
-              <PropertyValue Property=""Updatable"" Bool=""false"" />
+              <PropertyValue Property=""Updatable"" Bool=""{1}"" />
             </Record>
           </PropertyValue>
         </Record>
       </Collection>
     </PropertyValue>
   </Record>
-</Annotation>", navigationPropertyPath);
+</Annotation>", navigationPropertyPath, updatable);
 
             IEdmModel model = GetEdmModel(hasRestrictions ? annotation : "");
             ODataContext context = new ODataContext(model);
@@ -386,44 +411,27 @@ namespace Microsoft.OpenApi.OData.PathItem.Tests
             bool isCollection = navigationProperty.TargetMultiplicity() == EdmMultiplicity.Many;
 
             OperationType[] expected;
-            if (isContainment)
+            if (hasRestrictions)
             {
-                if (hasRestrictions)
+                if (isContainment)
                 {
-                    expected = new[] { OperationType.Get, OperationType.Delete };
+                    expected = updatable
+                        ? (new[] { OperationType.Get, OperationType.Patch, OperationType.Delete })
+                        : (new[] { OperationType.Get, OperationType.Delete });
                 }
                 else
                 {
-                    expected = new[] { OperationType.Get, OperationType.Patch, OperationType.Delete };
-                }
+                    expected = updatable
+                        ? (new[] { OperationType.Get, OperationType.Patch })
+                        : (new[] { OperationType.Get });
+                }                               
             }
             else
             {
-                expected = new[] { OperationType.Get };
+                expected = isContainment
+                    ? (new[] { OperationType.Get, OperationType.Patch, OperationType.Delete })
+                    : (new[] { OperationType.Get });
             }
-
-            //if (!isContainment || hasRestrictions)
-            //{
-            //    if (isCollection)
-            //    {
-            //        expected = new[] { OperationType.Get };
-            //    }
-            //    else
-            //    {
-            //        expected = new[] { OperationType.Get, OperationType.Delete };
-            //    }
-            //}
-            //else
-            //{
-            //    if (isCollection)
-            //    {
-            //        expected = new[] { OperationType.Get, OperationType.Patch };
-            //    }
-            //    else
-            //    {
-            //        expected = new[] { OperationType.Get, OperationType.Patch, OperationType.Delete };
-            //    }
-            //}
 
             Assert.Equal(expected, pathItem.Operations.Select(o => o.Key));
         }
@@ -431,7 +439,7 @@ namespace Microsoft.OpenApi.OData.PathItem.Tests
         [Theory]
         [MemberData(nameof(CollectionNavigationPropertyData))]
         [MemberData(nameof(SingleNavigationPropertyData))]
-        public void CreatePathItemForNavigationPropertyAndUpdateMethodUpdateRestrictions(bool updateMethod, string navigationPropertyPath)
+        public void CreatePathItemForNavigationPropertyAndUpdateMethodUpdateRestrictions(bool updateMethod, string navigationPropertyPath, bool updatable)
         {
             // Arrange
             string annotation = String.Format(@"
@@ -444,15 +452,16 @@ namespace Microsoft.OpenApi.OData.PathItem.Tests
           <PropertyValue Property=""UpdateRestrictions"" >
             <Record>
               <PropertyValue Property=""UpdateMethod"">
-                <EnumMember>Org.OData.Capabilities.V1.HttpMethod/PUT</EnumMember>
+                <EnumMember>Org.OData.Capabilities.V1.HttpMethod/PUT Org.OData.Capabilities.V1.HttpMethod/PATCH </EnumMember>
               </PropertyValue>
+              <PropertyValue Property=""Updatable"" Bool=""{1}"" />
             </Record>
           </PropertyValue>
         </Record>
       </Collection>
     </PropertyValue>
   </Record>
-</Annotation>", navigationPropertyPath);
+</Annotation>", navigationPropertyPath, updatable);
 
             IEdmModel model = GetEdmModel(updateMethod ? annotation : "");
             ODataContext context = new ODataContext(model);
@@ -474,28 +483,127 @@ namespace Microsoft.OpenApi.OData.PathItem.Tests
             bool isCollection = navigationProperty.TargetMultiplicity() == EdmMultiplicity.Many;
 
             OperationType[] expected;
-            if (isContainment)
+            if (updateMethod)
             {
-                if (updateMethod)
+                if (isContainment)
                 {
-                    expected = new[] { OperationType.Get, OperationType.Put, OperationType.Delete };
+                    expected = updatable
+                        ? ([OperationType.Get, OperationType.Put, OperationType.Patch, OperationType.Delete])
+                        : ([OperationType.Get, OperationType.Delete]);
                 }
                 else
                 {
-                    expected = new[] { OperationType.Get, OperationType.Patch, OperationType.Delete };
+                    expected = updatable
+                        ? ([OperationType.Get, OperationType.Put, OperationType.Patch,])
+                        : ([OperationType.Get]);
                 }
             }
             else
             {
-                expected = new[] { OperationType.Get };
+                expected = isContainment
+                    ? ([OperationType.Get, OperationType.Patch, OperationType.Delete])
+                    : ([OperationType.Get]);
+
             }
 
             Assert.Equal(expected, pathItem.Operations.Select(o => o.Key));
         }
 
-        public static IEdmModel GetEdmModel(string annotation)
+        [Fact]
+        public void CreatePathItemForNavigationPropertyWithRestrictionAnnotationsDefinedOnTargetEntityType()
         {
-            const string template = @"<edmx:Edmx Version=""4.0"" xmlns:edmx=""http://docs.oasis-open.org/odata/ns/edmx"">
+            // Arrange
+            IEdmModel model = EdmModelHelper.GraphBetaModel;
+            OpenApiConvertSettings settings = new()
+            {
+                GenerateDerivedTypesProperties = false
+            };
+            ODataContext context = new(model, settings);
+            IEdmSingleton ipSingleton = model.EntityContainer.FindSingleton("informationProtection");
+            Assert.NotNull(ipSingleton);
+            IEdmEntityType ipEntity = model.SchemaElements.OfType<IEdmEntityType>().First(c => c.Name == "informationProtection");
+            Assert.NotNull(ipEntity);
+            IEdmNavigationProperty bitlockerNavProp = ipEntity.DeclaredNavigationProperties().First(c => c.Name == "bitlocker");
+            Assert.NotNull(bitlockerNavProp);
+            IEdmEntityType bitlockerEntity = model.SchemaElements.OfType<IEdmEntityType>().First(c => c.Name == "bitlocker");
+            Assert.NotNull(bitlockerEntity);
+            IEdmNavigationProperty rkNavProp = bitlockerEntity.DeclaredNavigationProperties().First(c => c.Name == "recoveryKeys");
+            Assert.NotNull(rkNavProp);
+
+            ODataPath path = new(new ODataNavigationSourceSegment(ipSingleton),
+                new ODataNavigationPropertySegment(bitlockerNavProp),
+                new ODataNavigationPropertySegment(rkNavProp),
+                new ODataKeySegment(rkNavProp.ToEntityType()));
+            Assert.NotNull(path);
+
+            // Act
+            var pathItem = _pathItemHandler.CreatePathItem(context, path);
+
+            // Assert
+            Assert.NotNull(pathItem);
+            Assert.NotNull(pathItem.Operations);
+            Assert.Single(pathItem.Operations);
+            Assert.Equal(OperationType.Get, pathItem.Operations.FirstOrDefault().Key);
+        }
+
+        [Fact]
+        public void CreatePathItemForNavigationPropertyWithOutOfLineRestrictionAnnotations()
+        {
+            // Arrange
+            IEdmModel model = EdmModelHelper.GraphBetaModel;
+            OpenApiConvertSettings settings = new()
+            {
+                GenerateDerivedTypesProperties = false
+            };
+            ODataContext context = new(model, settings);
+            IEdmEntitySet users = model.EntityContainer.FindEntitySet("users");
+            Assert.NotNull(users);
+            IEdmEntityType user = model.SchemaElements.OfType<IEdmEntityType>().First(c => c.Name == "user");
+            Assert.NotNull(user);
+            IEdmNavigationProperty photo = user.DeclaredNavigationProperties().First(c => c.Name == "photo");
+            Assert.NotNull(photo);
+
+            ODataPath path = new(new ODataNavigationSourceSegment(users),
+                new ODataKeySegment(user),
+                new ODataNavigationPropertySegment(photo));
+            Assert.NotNull(path);
+
+            // Act
+            var pathItem = _pathItemHandler.CreatePathItem(context, path);
+
+            // Assert
+            Assert.NotNull(pathItem);
+            Assert.NotNull(pathItem.Operations);
+            Assert.Equal(2, pathItem.Operations.Count);
+            Assert.Equal(new[] { OperationType.Get, OperationType.Patch }, pathItem.Operations.Select(o => o.Key));
+        }
+
+        [Fact]
+        public void CreateNavigationPropertyPathItemAddsCustomAttributeValuesToPathExtensions()
+        {
+            // Arrange
+            IEdmModel model = GetEdmModel(annotation: "");
+            ODataContext context = new(model);
+            context.Settings.CustomXMLAttributesMapping.Add("ags:IsHidden", "x-ms-isHidden");
+            IEdmEntitySet entitySet = model.EntityContainer.FindEntitySet("Customers");
+            Assert.NotNull(entitySet); // guard
+            ODataPath path = CreatePath(entitySet, "MyOrder", false);
+
+            // Act
+            var pathItem = _pathItemHandler.CreatePathItem(context, path);
+
+            // Assert
+            Assert.NotNull(pathItem);
+            Assert.NotNull(pathItem.Extensions);
+
+            pathItem.Extensions.TryGetValue("x-ms-isHidden", out var value);
+            string isHiddenValue = (value as OpenApiString)?.Value;
+            Assert.Equal("true", isHiddenValue);
+        }
+
+        public static IEdmModel GetEdmModel(string annotation, string annotation2 = "")
+        {
+            const string template = @"<edmx:Edmx Version=""4.0"" xmlns:edmx=""http://docs.oasis-open.org/odata/ns/edmx"" xmlns:ags=""http://aggregator.microsoft.com/internal"">
   <edmx:DataServices>
     <Schema Namespace=""NS"" xmlns=""http://docs.oasis-open.org/odata/ns/edm"">
       <EntityType Name=""Customer"">
@@ -506,7 +614,7 @@ namespace Microsoft.OpenApi.OData.PathItem.Tests
         <NavigationProperty Name=""ContainedOrders"" Type=""Collection(NS.Order)"" ContainsTarget=""true"" />
         <NavigationProperty Name=""Orders"" Type=""Collection(NS.Order)"" />
         <NavigationProperty Name=""ContainedMyOrder"" Type=""NS.Order"" Nullable=""false"" ContainsTarget=""true"" />
-        <NavigationProperty Name=""MyOrder"" Type=""NS.Order"" Nullable=""false"" />
+        <NavigationProperty Name=""MyOrder"" Type=""NS.Order"" Nullable=""false"" ags:IsHidden=""true""/>
       </EntityType>
       <EntityType Name=""Order"">
         <Key>
@@ -531,11 +639,14 @@ namespace Microsoft.OpenApi.OData.PathItem.Tests
       <Annotations Target=""NS.Default/Customers"">
         {0}
       </Annotations>
+      <Annotations Target=""NS.Customer/Orders"">
+        {1}
+      </Annotations>
     </Schema>
   </edmx:DataServices>
 </edmx:Edmx>";
 
-            string modelText = string.Format(template, annotation);
+            string modelText = string.Format(template, annotation, annotation2);
 
             IEdmModel model;
             IEnumerable<EdmError> errors;
@@ -550,7 +661,7 @@ namespace Microsoft.OpenApi.OData.PathItem.Tests
             Assert.NotNull(navigationSource);
             Assert.NotNull(navigationPropertyPath);
 
-            IEdmEntityType previousEntityType = navigationSource.EntityType();
+            IEdmEntityType previousEntityType = navigationSource.EntityType;
             ODataPath path = new ODataPath(new ODataNavigationSourceSegment(navigationSource), new ODataKeySegment(previousEntityType));
 
             string[] npPaths = navigationPropertyPath.Split('/');

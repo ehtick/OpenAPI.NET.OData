@@ -5,6 +5,7 @@
 
 using Microsoft.OData.Edm;
 using Microsoft.OpenApi.Models;
+using Microsoft.OpenApi.OData.Common;
 using Microsoft.OpenApi.OData.Edm;
 using Microsoft.OpenApi.OData.Vocabulary.Capabilities;
 
@@ -42,8 +43,11 @@ namespace Microsoft.OpenApi.OData.PathItem
                 // how to invoke the function import.
 
                 // so far, <Term Name="ReadRestrictions" Type="Capabilities.ReadRestrictionsType" AppliesTo="EntitySet Singleton FunctionImport">
-                ReadRestrictionsType read = Context.Model.GetRecord<ReadRestrictionsType>(EdmOperationImport, CapabilitiesConstants.ReadRestrictions);
-                if (read == null || read.IsReadable)
+                ReadRestrictionsType readRestrictions = Context.Model.GetRecord<ReadRestrictionsType>(TargetPath, CapabilitiesConstants.ReadRestrictions);
+                ReadRestrictionsType operationReadRestrictions = Context.Model.GetRecord<ReadRestrictionsType>(EdmOperationImport, CapabilitiesConstants.ReadRestrictions);
+                readRestrictions?.MergePropertiesIfNull(operationReadRestrictions);
+                readRestrictions ??= operationReadRestrictions;
+                if (readRestrictions?.IsReadable ?? true)
                 {
                     AddOperation(item, OperationType.Get);
                 }
@@ -58,11 +62,19 @@ namespace Microsoft.OpenApi.OData.PathItem
             ODataOperationImportSegment operationImportSegment = path.FirstSegment as ODataOperationImportSegment;
             EdmOperationImport = operationImportSegment.OperationImport;
         }
+
         /// <inheritdoc/>
         protected override void SetBasicInfo(OpenApiPathItem pathItem)
         {
             base.SetBasicInfo(pathItem);
             pathItem.Description = $"Provides operations to call the {EdmOperationImport.Name} method.";
+        }
+
+        /// <inheritdoc/>
+        protected override void SetExtensions(OpenApiPathItem item)
+        {
+            base.SetExtensions(item);
+            item.Extensions.AddCustomAttributesToExtensions(Context, EdmOperationImport);
         }
     }
 }

@@ -9,7 +9,6 @@ using System.Linq;
 using Microsoft.OData.Edm;
 using Microsoft.OpenApi.OData.Common;
 using Microsoft.OData.Edm.Vocabularies;
-using Microsoft.OpenApi.OData.OpenApiExtensions;
 
 namespace Microsoft.OpenApi.OData.Edm
 {
@@ -109,7 +108,7 @@ namespace Microsoft.OpenApi.OData.Edm
             return GetPathItemName(settings, new HashSet<string>());
         }
         /// <summary>
-        /// Profides a suffix for the operation id based on the operation path.
+        /// Provides a suffix for the operation id based on the operation path.
         /// </summary>
         /// <param name="path">Path to use to deduplicate.</param>
         /// <param name="settings">The settings.</param>
@@ -128,10 +127,6 @@ namespace Microsoft.OpenApi.OData.Edm
         /// <returns>The path item name.</returns>
         public abstract string GetPathItemName(OpenApiConvertSettings settings, HashSet<string> parameters);
 
-        /// <summary>
-        /// Provides any deprecation information for the segment.
-        /// </summary>
-        public OpenApiDeprecationExtension Deprecation { get; set; }
         /// <summary>
         /// Returns the list of <see cref="IEdmVocabularyAnnotatable"/> this segment refers to.
         /// </summary>

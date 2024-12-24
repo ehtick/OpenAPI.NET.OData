@@ -20,16 +20,16 @@ internal class ComplexPropertyGetOperationHandler : ComplexPropertyBaseOperation
     /// <inheritdoc />
     public override OperationType OperationType => OperationType.Get;
 
-    /// <summary>
-    /// Gets/Sets the <see cref="ReadRestrictionsType"/>
-    /// </summary>
-    private ReadRestrictionsType ReadRestrictions { get; set; }
+    private ReadRestrictionsType _readRestrictions;
 
     protected override void Initialize(ODataContext context, ODataPath path)
     {
         base.Initialize(context, path);
 
-        ReadRestrictions = Context.Model.GetRecord<ReadRestrictionsType>(ComplexPropertySegment.Property, CapabilitiesConstants.ReadRestrictions);
+        _readRestrictions = Context.Model.GetRecord<ReadRestrictionsType>(TargetPath, CapabilitiesConstants.ReadRestrictions);
+        var complexPropertyReadRestrictions = Context.Model.GetRecord<ReadRestrictionsType>(ComplexPropertySegment.Property, CapabilitiesConstants.ReadRestrictions);
+        _readRestrictions?.MergePropertiesIfNull(complexPropertyReadRestrictions);
+        _readRestrictions ??= complexPropertyReadRestrictions;
     }
 
     /// <inheritdoc/>
@@ -38,15 +38,14 @@ internal class ComplexPropertyGetOperationHandler : ComplexPropertyBaseOperation
         // OperationId
         if (Context.Settings.EnableOperationId)
         {
-            string typeName = ComplexPropertySegment.ComplexType.Name;
-            string listOrGet = ComplexPropertySegment.Property.Type.IsCollection() ? ".List" : ".Get";
-            operation.OperationId = ComplexPropertySegment.Property.Name + "." + typeName + listOrGet + Utils.UpperFirstChar(typeName);
+            string prefix = ComplexPropertySegment.Property.Type.IsCollection() ? "List" : "Get";
+            operation.OperationId = EdmModelHelper.GenerateComplexPropertyPathOperationId(Path, Context, prefix);
         }
 
         // Summary and Description
         string placeHolder = $"Get {ComplexPropertySegment.Property.Name} property value";
-        operation.Summary = ReadRestrictions?.Description ?? placeHolder;
-        operation.Description = ReadRestrictions?.LongDescription ?? Context.Model.GetDescriptionAnnotation(ComplexPropertySegment.Property);
+        operation.Summary = _readRestrictions?.Description ?? placeHolder;
+        operation.Description = _readRestrictions?.LongDescription ?? Context.Model.GetDescriptionAnnotation(ComplexPropertySegment.Property);
 
         base.SetBasicInfo(operation);
     }
@@ -58,41 +57,40 @@ internal class ComplexPropertyGetOperationHandler : ComplexPropertyBaseOperation
         OpenApiParameter parameter;
         if(ComplexPropertySegment.Property.Type.IsCollection())
         {
-
             // The parameters array contains Parameter Objects for all system query options allowed for this collection,
             // and it does not list system query options not allowed for this collection, see terms
             // Capabilities.TopSupported, Capabilities.SkipSupported, Capabilities.SearchRestrictions,
             // Capabilities.FilterRestrictions, and Capabilities.CountRestrictions
             // $top
-            parameter = Context.CreateTop(ComplexPropertySegment.Property);
+            parameter = Context.CreateTop(TargetPath) ?? Context.CreateTop(ComplexPropertySegment.Property);
             if (parameter != null)
             {
                 operation.Parameters.Add(parameter);
             }
 
             // $skip
-            parameter = Context.CreateSkip(ComplexPropertySegment.Property);
+            parameter = Context.CreateSkip(TargetPath) ?? Context.CreateSkip(ComplexPropertySegment.Property);
             if (parameter != null)
             {
                 operation.Parameters.Add(parameter);
             }
 
             // $search
-            parameter = Context.CreateSearch(ComplexPropertySegment.Property);
+            parameter = Context.CreateSearch(TargetPath) ?? Context.CreateSearch(ComplexPropertySegment.Property);
             if (parameter != null)
             {
                 operation.Parameters.Add(parameter);
             }
 
             // $filter
-            parameter = Context.CreateFilter(ComplexPropertySegment.Property);
+            parameter = Context.CreateFilter(TargetPath) ?? Context.CreateFilter(ComplexPropertySegment.Property);
             if (parameter != null)
             {
                 operation.Parameters.Add(parameter);
             }
 
             // $count
-            parameter = Context.CreateCount(ComplexPropertySegment.Property);
+            parameter = Context.CreateCount(TargetPath) ?? Context.CreateCount(ComplexPropertySegment.Property);
             if (parameter != null)
             {
                 operation.Parameters.Add(parameter);
@@ -103,7 +101,8 @@ internal class ComplexPropertyGetOperationHandler : ComplexPropertyBaseOperation
             // of just providing a comma-separated list of properties can be expressed via an array-valued
             // parameter with an enum constraint
             // $order
-            parameter = Context.CreateOrderBy(ComplexPropertySegment.Property, ComplexPropertySegment.ComplexType);
+            parameter = Context.CreateOrderBy(TargetPath, ComplexPropertySegment.ComplexType) 
+                ?? Context.CreateOrderBy(ComplexPropertySegment.Property, ComplexPropertySegment.ComplexType);
             if (parameter != null)
             {
                 operation.Parameters.Add(parameter);
@@ -111,14 +110,16 @@ internal class ComplexPropertyGetOperationHandler : ComplexPropertyBaseOperation
         }
 
         // $select
-        parameter = Context.CreateSelect(ComplexPropertySegment.Property, ComplexPropertySegment.ComplexType);
+        parameter = Context.CreateSelect(TargetPath, ComplexPropertySegment.ComplexType) 
+            ?? Context.CreateSelect(ComplexPropertySegment.Property, ComplexPropertySegment.ComplexType);
         if (parameter != null)
         {
             operation.Parameters.Add(parameter);
         }
 
         // $expand
-        parameter = Context.CreateExpand(ComplexPropertySegment.Property, ComplexPropertySegment.ComplexType);
+        parameter = Context.CreateExpand(TargetPath, ComplexPropertySegment.ComplexType) 
+            ?? Context.CreateExpand(ComplexPropertySegment.Property, ComplexPropertySegment.ComplexType);
         if (parameter != null)
         {
             operation.Parameters.Add(parameter);
@@ -142,39 +143,13 @@ internal class ComplexPropertyGetOperationHandler : ComplexPropertyBaseOperation
     /// <inheritdoc/>
     protected override void SetResponses(OpenApiOperation operation)
     {
-        if(ComplexPropertySegment.Property.Type.IsCollection())
-            SetCollectionResponse(operation);
+        if (ComplexPropertySegment.Property.Type.IsCollection())
+        {
+            SetCollectionResponse(operation, ComplexPropertySegment.ComplexType.FullName());
+        }
         else
-            SetSingleResponse(operation);
-        operation.AddErrorResponses(Context.Settings, false);
-
-        base.SetResponses(operation);
-    }
-    private void SetCollectionResponse(OpenApiOperation operation)
-    {
-        operation.Responses = new OpenApiResponses
         {
-            {
-                Constants.StatusCode200,
-                new OpenApiResponse
-                {
-                    UnresolvedReference = true,
-                    Reference = new OpenApiReference()
-                    {
-                        Type = ReferenceType.Response,
-                        Id = $"{ComplexPropertySegment.ComplexType.FullName()}{Constants.CollectionSchemaSuffix}"
-                    },
-                }
-            }
-        };
-    }
-    private void SetSingleResponse(OpenApiOperation operation)
-    {
-        OpenApiSchema schema = null;
-
-        if (schema == null)
-        {
-            schema = new OpenApiSchema
+            OpenApiSchema schema = new()
             {
                 UnresolvedReference = true,
                 Reference = new OpenApiReference
@@ -183,53 +158,39 @@ internal class ComplexPropertyGetOperationHandler : ComplexPropertyBaseOperation
                     Id = ComplexPropertySegment.ComplexType.FullName()
                 }
             };
+
+            SetSingleResponse(operation, schema);
         }
-        operation.Responses = new OpenApiResponses
-        {
-            {
-                Constants.StatusCode200,
-                new OpenApiResponse
-                {
-                    Description = "Result entities",
-                    Content = new Dictionary<string, OpenApiMediaType>
-                    {
-                        {
-                            Constants.ApplicationJsonMediaType,
-                            new OpenApiMediaType
-                            {
-                                Schema = schema
-                            }
-                        }
-                    },
-                }
-            }
-        };
+
+        operation.AddErrorResponses(Context.Settings, false);
+        base.SetResponses(operation);
     }
+   
     protected override void SetSecurity(OpenApiOperation operation)
     {
-        if (ReadRestrictions?.Permissions == null)
+        if (_readRestrictions?.Permissions == null)
         {
             return;
         }
 
-        operation.Security = Context.CreateSecurityRequirements(ReadRestrictions.Permissions).ToList();
+        operation.Security = Context.CreateSecurityRequirements(_readRestrictions.Permissions).ToList();
     }
 
     protected override void AppendCustomParameters(OpenApiOperation operation)
     {        
-        if (ReadRestrictions == null)
+        if (_readRestrictions == null)
         {
             return;
         }
 
-        if (ReadRestrictions.CustomHeaders != null)
+        if (_readRestrictions.CustomHeaders != null)
         {
-            AppendCustomParameters(operation, ReadRestrictions.CustomHeaders, ParameterLocation.Header);
+            AppendCustomParameters(operation, _readRestrictions.CustomHeaders, ParameterLocation.Header);
         }
 
-        if (ReadRestrictions.CustomQueryOptions != null)
+        if (_readRestrictions.CustomQueryOptions != null)
         {
-            AppendCustomParameters(operation, ReadRestrictions.CustomQueryOptions, ParameterLocation.Query);
+            AppendCustomParameters(operation, _readRestrictions.CustomQueryOptions, ParameterLocation.Query);
         }
     }
 }

@@ -4,9 +4,11 @@
 // ------------------------------------------------------------
 
 using System;
+using System.Collections.Generic;
 using Microsoft.OpenApi.OData.Common;
 using Microsoft.OpenApi.OData.Edm;
 using Microsoft.OpenApi.OData.Extensions;
+using Microsoft.OpenApi.OData.Vocabulary.Core;
 
 namespace Microsoft.OpenApi.OData
 {
@@ -21,9 +23,9 @@ namespace Microsoft.OpenApi.OData
         public Uri ServiceRoot { get; set; } = new Uri("http://localhost");
 
         /// <summary>
-        /// Gets/sets the metadata version.
+        /// Get/set the metadata version.
         /// </summary>
-        public Version Version { get; set; } = new Version(1, 0, 1);
+        public string SemVerVersion { get; set; } = "1.0.0";
 
         /// <summary>
         /// Gets/set a value indicating whether to output key as segment path.
@@ -99,6 +101,16 @@ namespace Microsoft.OpenApi.OData
         public bool EnablePagination { get; set; }
 
         /// <summary>
+        /// Gets/sets a value indicating whether or not to allow the count of a collection of entities.
+        /// </summary>
+        public bool EnableCount { get; set; }
+
+        /// <summary>
+        /// Gets/sets a value indicating whether or not to reference @odata.nextLink, @odata.deltaLink and @odata.count in responses
+        /// </summary>
+        public bool EnableODataAnnotationReferencesForResponses { get; set; } = true;
+
+        /// <summary>
         /// Gets/sets a value that specifies the name of the operation for retrieving the next page in a collection of entities.
         /// </summary>
         public string PageableOperationName { get; set; } = "listMore";
@@ -117,6 +129,11 @@ namespace Microsoft.OpenApi.OData
         /// Gets/sets a value indicating whether or not to show the derived types of a base type reference in the requestBody payload.
         /// </summary>
         public bool EnableDerivedTypesReferencesForRequestBody { get; set; } = false;
+
+        /// <summary>
+        /// Gets/sets a value indicating whether or not to generate paths with alternate key parameters
+        /// </summary>
+        public bool AddAlternateKeyPaths { get; set; } = false;
 
         /// <summary>
         /// Gets/sets a value that specifies a prefix to be prepended to all generated paths.
@@ -179,6 +196,11 @@ namespace Microsoft.OpenApi.OData
         public bool ShowMsDosGroupPath { get; set; } = true;
 
         /// <summary>
+        /// Gets/sets links to external documentation for operations
+        /// </summary>
+        public bool ShowExternalDocs { get; set; } = true;
+
+        /// <summary>
         /// Gets/sets a the path provider.
         /// </summary>
         public IODataPathProvider PathProvider { get; set; }
@@ -204,6 +226,11 @@ namespace Microsoft.OpenApi.OData
         public bool RequireDerivedTypesConstraintForODataTypeCastSegments { get; set; } = true;
 
         /// <summary>
+        /// Gets/Sets a value indicating whether or not to retrieve complex or navigation properties declared in derived types.
+        /// </summary>
+        public bool GenerateDerivedTypesProperties { get; set; } = true;
+        
+        /// <summary>
         /// Gets/sets a value indicating whether or not to set the deprecated tag for the operation when a revision is present as well as the "x-ms-deprecation" extension with additional information.
         /// </summary>
         public bool EnableDeprecationInformation { get; set; } = true;
@@ -215,6 +242,11 @@ namespace Microsoft.OpenApi.OData
         /// </summary>
         public bool AddEnumDescriptionExtension { get; set; } = false;
 
+        /// <summary>
+        /// Gets/sets a value indicating whether or not to add a "x-ms-enum-flags" extension to the enum type schema.
+        /// </summary>
+        public bool AddEnumFlagsExtension { get; set; } = true;
+        
         /// <summary>
         /// Gets/sets a value indicating whether the error responses should be described as a default response or as 4XX and 5XX error responses.
         /// </summary>
@@ -237,12 +269,80 @@ namespace Microsoft.OpenApi.OData
         /// </summary>
         public bool RequireRestrictionAnnotationsToGenerateComplexPropertyPaths { get; set; } = true;
 
+        /// <summary>
+        /// Gets/sets a dictionary containing a mapping of custom attribute names and extension names.
+        /// </summary>
+        public Dictionary<string, string> CustomXMLAttributesMapping { get; set; } = new();
+
+        /// <summary>
+        /// Gets/sets a value indicating whether or not to append bound operations on derived type cast segments.
+        /// </summary>
+        public bool AppendBoundOperationsOnDerivedTypeCastSegments { get; set; } = false;
+
+        /// <summary>
+        /// Gets/Sets a value indicating whether or not to use the HTTP success status code range 2XX
+        /// to represent all response codes between 200 - 299.
+        /// </summary>
+        public bool UseSuccessStatusCodeRange { get; set; } = false;
+
+        /// <summary>
+        /// Gets/Sets a value indicating whether to show the version of the assembly used for generating 
+        /// Open API document
+        /// </summary>
+        public bool IncludeAssemblyInfo { get; set; } = true;
+
+        /// <summary>
+        /// Get/Sets a dictionary containing a mapping of HTTP methods to custom link relation types 
+        /// </summary>
+        public Dictionary<LinkRelKey, string> CustomHttpMethodLinkRelMapping { get; set; } = new()
+        {
+            { LinkRelKey.List, "https://graph.microsoft.com/rels/docs/list" },
+            { LinkRelKey.ReadByKey, "https://graph.microsoft.com/rels/docs/get" },
+            { LinkRelKey.Create, "https://graph.microsoft.com/rels/docs/create" },
+            { LinkRelKey.Update, "https://graph.microsoft.com/rels/docs/update" },
+            { LinkRelKey.Delete, "https://graph.microsoft.com/rels/docs/delete" },
+            { LinkRelKey.Action, "https://graph.microsoft.com/rels/docs/action" },
+            { LinkRelKey.Function, "https://graph.microsoft.com/rels/docs/function" }
+        };
+
+        /// <summary>
+        /// Gets/sets a value indicating whether to set the default value for a structured type's @odata.type property.
+        /// If false, the value will be set conditionally based on whether the type's base type is abstract (and not entity)
+        /// and is referenced in the properties of a structural property or an action.
+        /// </summary>
+        public bool EnableTypeDisambiguationForDefaultValueOfOdataTypeProperty { get; set; } = false;
+
+        /// <summary>
+        /// The namespace prefix to be stripped from the in method paths.
+        /// </summary>
+        public string NamespacePrefixToStripForInMethodPaths { get; set; }
+
+        /// <summary>
+        /// Enables the use of aliases for the type cast segments to shorten the url path.
+        /// </summary>
+        public bool EnableAliasForTypeCastSegments { get; set; } = false;
+
+        /// <summary>
+        /// Enables the use of aliases for operation segments to shorten the url path.
+        /// </summary>
+        public bool EnableAliasForOperationSegments { get; set; } = false;
+
+        /// <summary>
+        /// Gets/Sets a value indicating whether or not to generate the schema of query options as an array of string values.
+        /// If false, the schema will be generated as an array of enum string values.
+        /// </summary>
+        public bool UseStringArrayForQueryOptionsSchema { get; set; } = true;
+
+        /// <summary>
+        /// Gets/Sets a value indicating the depth to expand composable functions.
+        /// </summary>
+        public int ComposableFunctionsExpansionDepth { get; set; } = 1;
+
         internal OpenApiConvertSettings Clone()
         {
             var newSettings = new OpenApiConvertSettings
             {
                 ServiceRoot = this.ServiceRoot,
-                Version = this.Version,
                 EnableKeyAsSegment = this.EnableKeyAsSegment,
                 EnableUnqualifiedCall = this.EnableUnqualifiedCall,
                 EnableOperationPath = this.EnableOperationPath,
@@ -266,6 +366,7 @@ namespace Microsoft.OpenApi.OData
                 RequireDerivedTypesConstraintForBoundOperations = this.RequireDerivedTypesConstraintForBoundOperations,
                 ShowSchemaExamples = this.ShowSchemaExamples,
                 ShowRootPath = this.ShowRootPath,
+                ShowExternalDocs = this.ShowExternalDocs,
                 PathProvider = this.PathProvider,
                 EnableDollarCountPath = this.EnableDollarCountPath,
                 AddSingleQuotesForStringParameters = this.AddSingleQuotesForStringParameters,
@@ -273,9 +374,26 @@ namespace Microsoft.OpenApi.OData
                 RequireDerivedTypesConstraintForODataTypeCastSegments = this.RequireDerivedTypesConstraintForODataTypeCastSegments,
                 EnableDeprecationInformation = this.EnableDeprecationInformation,
                 AddEnumDescriptionExtension = this.AddEnumDescriptionExtension,
+                AddEnumFlagsExtension = this.AddEnumFlagsExtension,
                 ErrorResponsesAsDefault = this.ErrorResponsesAsDefault,
                 InnerErrorComplexTypeName = this.InnerErrorComplexTypeName,
-                RequireRestrictionAnnotationsToGenerateComplexPropertyPaths = this.RequireRestrictionAnnotationsToGenerateComplexPropertyPaths
+                RequireRestrictionAnnotationsToGenerateComplexPropertyPaths = this.RequireRestrictionAnnotationsToGenerateComplexPropertyPaths,
+                GenerateDerivedTypesProperties = this.GenerateDerivedTypesProperties,
+                CustomXMLAttributesMapping = this.CustomXMLAttributesMapping,
+                CustomHttpMethodLinkRelMapping = this.CustomHttpMethodLinkRelMapping,
+                AppendBoundOperationsOnDerivedTypeCastSegments = this.AppendBoundOperationsOnDerivedTypeCastSegments,
+                UseSuccessStatusCodeRange = this.UseSuccessStatusCodeRange,
+                EnableCount = this.EnableCount,
+                IncludeAssemblyInfo = this.IncludeAssemblyInfo,
+                EnableODataAnnotationReferencesForResponses = this.EnableODataAnnotationReferencesForResponses,
+                EnableTypeDisambiguationForDefaultValueOfOdataTypeProperty = this.EnableTypeDisambiguationForDefaultValueOfOdataTypeProperty,
+                AddAlternateKeyPaths = this.AddAlternateKeyPaths,
+                NamespacePrefixToStripForInMethodPaths = this.NamespacePrefixToStripForInMethodPaths,
+                EnableAliasForTypeCastSegments = this.EnableAliasForTypeCastSegments,
+                SemVerVersion = this.SemVerVersion,
+                EnableAliasForOperationSegments = this.EnableAliasForOperationSegments,
+                UseStringArrayForQueryOptionsSchema = this.UseStringArrayForQueryOptionsSchema,
+                ComposableFunctionsExpansionDepth = this.ComposableFunctionsExpansionDepth
             };
 
             return newSettings;

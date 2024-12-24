@@ -1,4 +1,4 @@
-﻿// ------------------------------------------------------------
+// ------------------------------------------------------------
 //  Copyright (c) Microsoft Corporation.  All rights reserved.
 //  Licensed under the MIT License (MIT). See LICENSE in the repo root for license information.
 // ------------------------------------------------------------
@@ -22,6 +22,7 @@ using System.Net.Http;
 
 namespace OoasGui
 {
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     public partial class MainForm : Form
     {
         private OpenApiFormat Format { get; set; } = OpenApiFormat.Json;
@@ -32,10 +33,13 @@ namespace OoasGui
 
         private IEdmModel EdmModel { get; set; }
 
+        private OpenApiDocument _document;
+
         public MainForm()
         {
             InitializeComponent();
 
+            saveBtn.Enabled = false;
             jsonRadioBtn.Checked = true;
             v3RadioButton.Checked = true;
             fromFileRadioBtn.Checked = true;
@@ -50,29 +54,36 @@ namespace OoasGui
             csdlRichTextBox.WordWrap = false;
             oasRichTextBox.WordWrap = false;
         }
-
+#pragma warning disable VSTHRD100
         private async void jsonRadioBtn_CheckedChanged(object sender, EventArgs e)
+#pragma warning restore VSTHRD100
         {
             Format = OpenApiFormat.Json;
-            await Convert();
+            await ConvertAsync();
         }
 
+#pragma warning disable VSTHRD100
         private async void yamlRadioBtn_CheckedChanged(object sender, EventArgs e)
+#pragma warning restore VSTHRD100
         {
             Format = OpenApiFormat.Yaml;
-            await Convert();
+            await ConvertAsync();
         }
 
+#pragma warning disable VSTHRD100
         private async void v2RadioBtn_CheckedChanged(object sender, EventArgs e)
+#pragma warning restore VSTHRD100
         {
             Settings.OpenApiSpecVersion = Version = OpenApiSpecVersion.OpenApi2_0;
-            await Convert();
+            await ConvertAsync();
         }
 
+#pragma warning disable VSTHRD100
         private async void v3RadioBtn_CheckedChanged(object sender, EventArgs e)
+#pragma warning restore VSTHRD100
         {
             Settings.OpenApiSpecVersion = Version = OpenApiSpecVersion.OpenApi3_0;
-            await Convert();
+            await ConvertAsync();
         }
 
         private void fromFileRadioBtn_CheckedChanged(object sender, EventArgs e)
@@ -92,7 +103,9 @@ namespace OoasGui
             loadBtn.Enabled = true;
         }
 
+#pragma warning disable VSTHRD100
         private async void btnBrowse_Click(object sender, EventArgs e)
+#pragma warning restore VSTHRD100
         {
             OpenFileDialog openFileDialog = new OpenFileDialog();
             openFileDialog.Filter = "CSDL files (*.xml)|*.xml|All files (*.*)|*.*";
@@ -107,7 +120,7 @@ namespace OoasGui
                     fileTextBox.Text = openFileDialog.FileName;
                     csdlRichTextBox.Text = text;
                     Settings.ServiceRoot = new Uri(openFileDialog.FileName);
-                    await Convert();
+                    await ConvertAsync();
                 }
                 catch (Exception ex)
                 {
@@ -122,7 +135,9 @@ namespace OoasGui
 
         private static HttpClient client = new();
 
+#pragma warning disable VSTHRD100
         private async void loadBtn_Click(object sender, EventArgs e)
+#pragma warning restore VSTHRD100
         {
             string url = urlTextBox.Text;
 
@@ -145,7 +160,7 @@ namespace OoasGui
                 LoadEdm(url, csdl);
                 csdlRichTextBox.Text = FormatXml(csdl);
                 Settings.ServiceRoot = requestUri;
-                await Convert();
+                await ConvertAsync();
             }
             catch(Exception ex)
             {
@@ -177,8 +192,10 @@ namespace OoasGui
             EdmModel = model;
         }
 
-        private async Task Convert()
+        private async Task ConvertAsync()
         {
+            saveBtn.Enabled = false;
+
             if (EdmModel == null)
             {
                 return;
@@ -187,15 +204,16 @@ namespace OoasGui
             string openApi = null;
             await Task.Run(() =>
             {
-                OpenApiDocument document = EdmModel.ConvertToOpenApi(Settings);
+                _document = EdmModel.ConvertToOpenApi(Settings);
                 MemoryStream stream = new MemoryStream();
-                document.Serialize(stream, Version, Format);
+                _document.Serialize(stream, Version, Format);
                 stream.Flush();
                 stream.Position = 0;
                 openApi = new StreamReader(stream).ReadToEnd();
             });
 
             oasRichTextBox.Text = openApi;
+            saveBtn.Enabled = true;
         }
 
         private string FormatXml(string xml)
@@ -215,7 +233,9 @@ namespace OoasGui
             return sw.ToString();
         }
 
+#pragma warning disable VSTHRD100
         private async void saveBtn_Click(object sender, EventArgs e)
+#pragma warning restore VSTHRD100
         {
             SaveFileDialog saveFileDialog = new SaveFileDialog();
             if (Format == OpenApiFormat.Json)
@@ -227,7 +247,6 @@ namespace OoasGui
                 saveFileDialog.Filter = "YAML files (*.yaml)|*.yaml|All files (*.*)|*.*";
             }
 
-            saveFileDialog.FilterIndex = 2;
             saveFileDialog.RestoreDirectory = true;
 
             if (saveFileDialog.ShowDialog() == DialogResult.OK)
@@ -237,32 +256,37 @@ namespace OoasGui
                 {
                     await Task.Run(() =>
                     {
-                        OpenApiDocument document = EdmModel.ConvertToOpenApi(Settings);
-                        document.Serialize(fs, Version, Format);
+                        _document?.Serialize(fs, Version, Format);
                         fs.Flush();
                     });
                 }
-            }
 
-            MessageBox.Show("Saved successful!");
+                MessageBox.Show("Saved successfully!");
+            }
         }
 
+#pragma warning disable VSTHRD100
         private async void operationIdcheckBox_CheckedChanged(object sender, EventArgs e)
+#pragma warning restore VSTHRD100
         {
             Settings.EnableOperationId = !Settings.EnableOperationId;
-            await Convert ();
+            await ConvertAsync ();
         }
 
+#pragma warning disable VSTHRD100
         private async void VerifyEdmModelcheckBox_CheckedChanged(object sender, EventArgs e)
+#pragma warning restore VSTHRD100
         {
             Settings.VerifyEdmModel = !Settings.VerifyEdmModel;
-            await Convert();
+            await ConvertAsync();
         }
 
+#pragma warning disable VSTHRD100
         private async void NavPathcheckBox_CheckedChanged(object sender, EventArgs e)
+#pragma warning restore VSTHRD100
         {
             Settings.EnableNavigationPropertyPath = !Settings.EnableNavigationPropertyPath;
-            await Convert();
+            await ConvertAsync();
         }
     }
 }

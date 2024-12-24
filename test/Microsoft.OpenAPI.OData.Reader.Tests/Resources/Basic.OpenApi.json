@@ -1,9 +1,9 @@
 {
-  "openapi": "3.0.1",
+  "openapi": "3.0.4",
   "info": {
     "title": "OData Service for namespace DefaultNs",
     "description": "This OData service is located at http://localhost",
-    "version": "1.0.1"
+    "version": "1.0.0"
   },
   "servers": [
     {
@@ -144,7 +144,7 @@
           {
             "name": "Name",
             "in": "path",
-            "description": "key: Name of City",
+            "description": "The unique identifier of City",
             "required": true,
             "schema": {
               "type": "string"
@@ -213,7 +213,7 @@
           {
             "name": "Name",
             "in": "path",
-            "description": "key: Name of City",
+            "description": "The unique identifier of City",
             "required": true,
             "schema": {
               "type": "string"
@@ -252,7 +252,7 @@
           {
             "name": "Name",
             "in": "path",
-            "description": "key: Name of City",
+            "description": "The unique identifier of City",
             "required": true,
             "schema": {
               "type": "string"
@@ -282,8 +282,19 @@
     "/City/$count": {
       "description": "Provides operations to count the resources in the collection.",
       "get": {
+        "tags": [
+          "City.City"
+        ],
         "summary": "Get the number of the resource",
-        "operationId": "Get.Count.City-8728",
+        "operationId": "City.GetCount-8728",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/search"
+          },
+          {
+            "$ref": "#/components/parameters/filter"
+          }
+        ],
         "responses": {
           "200": {
             "$ref": "#/components/responses/ODataCountResponse"
@@ -427,7 +438,7 @@
           {
             "name": "Name",
             "in": "path",
-            "description": "key: Name of CountryOrRegion",
+            "description": "The unique identifier of CountryOrRegion",
             "required": true,
             "schema": {
               "type": "string"
@@ -496,7 +507,7 @@
           {
             "name": "Name",
             "in": "path",
-            "description": "key: Name of CountryOrRegion",
+            "description": "The unique identifier of CountryOrRegion",
             "required": true,
             "schema": {
               "type": "string"
@@ -535,7 +546,7 @@
           {
             "name": "Name",
             "in": "path",
-            "description": "key: Name of CountryOrRegion",
+            "description": "The unique identifier of CountryOrRegion",
             "required": true,
             "schema": {
               "type": "string"
@@ -565,8 +576,19 @@
     "/CountryOrRegion/$count": {
       "description": "Provides operations to count the resources in the collection.",
       "get": {
+        "tags": [
+          "CountryOrRegion.CountryOrRegion"
+        ],
         "summary": "Get the number of the resource",
-        "operationId": "Get.Count.CountryOrRegion-daf5",
+        "operationId": "CountryOrRegion.GetCount-daf5",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/search"
+          },
+          {
+            "$ref": "#/components/parameters/filter"
+          }
+        ],
         "responses": {
           "200": {
             "$ref": "#/components/responses/ODataCountResponse"
@@ -812,7 +834,7 @@
           {
             "name": "UserName",
             "in": "path",
-            "description": "key: UserName of Person",
+            "description": "The unique identifier of Person",
             "required": true,
             "schema": {
               "type": "string"
@@ -884,7 +906,7 @@
           {
             "name": "UserName",
             "in": "path",
-            "description": "key: UserName of Person",
+            "description": "The unique identifier of Person",
             "required": true,
             "schema": {
               "type": "string"
@@ -923,7 +945,7 @@
           {
             "name": "UserName",
             "in": "path",
-            "description": "key: UserName of Person",
+            "description": "The unique identifier of Person",
             "required": true,
             "schema": {
               "type": "string"
@@ -953,8 +975,19 @@
     "/People/$count": {
       "description": "Provides operations to count the resources in the collection.",
       "get": {
+        "tags": [
+          "People.Person"
+        ],
         "summary": "Get the number of the resource",
-        "operationId": "Get.Count.People-dd8d",
+        "operationId": "People.GetCount-dd8d",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/search"
+          },
+          {
+            "$ref": "#/components/parameters/filter"
+          }
+        ],
         "responses": {
           "200": {
             "$ref": "#/components/responses/ODataCountResponse"
@@ -1043,7 +1076,7 @@
           "Id": {
             "maximum": 2147483647,
             "minimum": -2147483648,
-            "type": "integer",
+            "type": "number",
             "format": "int32"
           },
           "City": {
@@ -1051,7 +1084,7 @@
           }
         },
         "example": {
-          "Id": "integer",
+          "Id": "number",
           "City": {
             "@odata.type": "DefaultNs.City"
           }
@@ -1073,7 +1106,7 @@
           }
         ],
         "example": {
-          "Id": "integer",
+          "Id": "number",
           "City": {
             "@odata.type": "DefaultNs.City"
           },
@@ -1104,7 +1137,8 @@
             "type": "string"
           },
           "message": {
-            "type": "string"
+            "type": "string",
+            "x-ms-primary-error-message": true
           },
           "target": {
             "type": "string",
@@ -1116,7 +1150,7 @@
               "$ref": "#/components/schemas/DefaultNs.ODataErrors.ErrorDetails"
             }
           },
-          "innererror": {
+          "innerError": {
             "$ref": "#/components/schemas/DefaultNs.ODataErrors.InnerError"
           }
         }
@@ -1195,6 +1229,38 @@
             }
           }
         }
+      },
+      "ReferenceUpdate": {
+        "type": "object",
+        "properties": {
+          "@odata.id": {
+            "type": "string"
+          },
+          "@odata.type": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "ReferenceCreate": {
+        "type": "object",
+        "properties": {
+          "@odata.id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "ReferenceNumeric": {
+        "enum": [
+          "-INF",
+          "INF",
+          "NaN"
+        ],
+        "type": "string",
+        "nullable": true
       }
     },
     "responses": {
@@ -1264,6 +1330,8 @@
         "name": "$top",
         "in": "query",
         "description": "Show only the first n items",
+        "style": "form",
+        "explode": false,
         "schema": {
           "minimum": 0,
           "type": "integer"
@@ -1274,6 +1342,8 @@
         "name": "$skip",
         "in": "query",
         "description": "Skip the first n items",
+        "style": "form",
+        "explode": false,
         "schema": {
           "minimum": 0,
           "type": "integer"
@@ -1283,6 +1353,8 @@
         "name": "$count",
         "in": "query",
         "description": "Include count of items",
+        "style": "form",
+        "explode": false,
         "schema": {
           "type": "boolean"
         }
@@ -1291,6 +1363,8 @@
         "name": "$filter",
         "in": "query",
         "description": "Filter items by property values",
+        "style": "form",
+        "explode": false,
         "schema": {
           "type": "string"
         }
@@ -1299,6 +1373,8 @@
         "name": "$search",
         "in": "query",
         "description": "Search items by search phrases",
+        "style": "form",
+        "explode": false,
         "schema": {
           "type": "string"
         }
@@ -1345,6 +1421,30 @@
             "@odata.type": "DefaultNs.CountryOrRegion"
           }
         }
+      }
+    },
+    "requestBodies": {
+      "refPostBody": {
+        "description": "New navigation property ref value",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ReferenceCreate"
+            }
+          }
+        },
+        "required": true
+      },
+      "refPutBody": {
+        "description": "New navigation property ref values",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ReferenceUpdate"
+            }
+          }
+        },
+        "required": true
       }
     }
   },

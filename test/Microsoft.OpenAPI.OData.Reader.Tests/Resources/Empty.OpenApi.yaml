@@ -1,8 +1,8 @@
-openapi: 3.0.1
+openapi: 3.0.4
 info:
   title: 'OData Service for namespace '
   description: This OData service is located at http://localhost
-  version: 1.0.1
+  version: 1.0.0
 servers:
   - url: http://localhost
 paths: { }
@@ -25,6 +25,7 @@ components:
           type: string
         message:
           type: string
+          x-ms-primary-error-message: true
         target:
           type: string
           nullable: true
@@ -32,7 +33,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ODataErrors.ErrorDetails'
-        innererror:
+        innerError:
           $ref: '#/components/schemas/ODataErrors.InnerError'
     ODataErrors.ErrorDetails:
       required:
@@ -53,6 +54,28 @@ components:
     ODataCountResponse:
       type: integer
       format: int32
+    ReferenceUpdate:
+      type: object
+      properties:
+        '@odata.id':
+          type: string
+        '@odata.type':
+          type: string
+          nullable: true
+    ReferenceCreate:
+      type: object
+      properties:
+        '@odata.id':
+          type: string
+      additionalProperties:
+        type: object
+    ReferenceNumeric:
+      enum:
+        - '-INF'
+        - INF
+        - NaN
+      type: string
+      nullable: true
   responses:
     error:
       description: error
@@ -71,6 +94,8 @@ components:
       name: $top
       in: query
       description: Show only the first n items
+      style: form
+      explode: false
       schema:
         minimum: 0
         type: integer
@@ -79,6 +104,8 @@ components:
       name: $skip
       in: query
       description: Skip the first n items
+      style: form
+      explode: false
       schema:
         minimum: 0
         type: integer
@@ -86,17 +113,38 @@ components:
       name: $count
       in: query
       description: Include count of items
+      style: form
+      explode: false
       schema:
         type: boolean
     filter:
       name: $filter
       in: query
       description: Filter items by property values
+      style: form
+      explode: false
       schema:
         type: string
     search:
       name: $search
       in: query
       description: Search items by search phrases
+      style: form
+      explode: false
       schema:
         type: string
+  requestBodies:
+    refPostBody:
+      description: New navigation property ref value
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ReferenceCreate'
+      required: true
+    refPutBody:
+      description: New navigation property ref values
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ReferenceUpdate'
+      required: true

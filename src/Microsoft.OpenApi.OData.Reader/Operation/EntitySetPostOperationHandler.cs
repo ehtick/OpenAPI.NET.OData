@@ -11,6 +11,7 @@ using Microsoft.OpenApi.OData.Common;
 using Microsoft.OpenApi.OData.Edm;
 using Microsoft.OpenApi.OData.Generator;
 using Microsoft.OpenApi.OData.Vocabulary.Capabilities;
+using Microsoft.OpenApi.OData.Vocabulary.Core;
 
 namespace Microsoft.OpenApi.OData.Operation
 {
@@ -23,17 +24,17 @@ namespace Microsoft.OpenApi.OData.Operation
     {
         /// <inheritdoc/>
         public override OperationType OperationType => OperationType.Post;
-
-        /// <summary>
-        /// Gets/Sets the <see cref="InsertRestrictionsType"/>
-        /// </summary>
-        private InsertRestrictionsType InsertRestrictions { get; set; }
+               
+        private InsertRestrictionsType _insertRestrictions;
 
         protected override void Initialize(ODataContext context, ODataPath path)
         {
             base.Initialize(context, path);
 
-            InsertRestrictions = Context.Model.GetRecord<InsertRestrictionsType>(EntitySet, CapabilitiesConstants.InsertRestrictions);
+            _insertRestrictions = Context.Model.GetRecord<InsertRestrictionsType>(TargetPath, CapabilitiesConstants.InsertRestrictions);
+            var entityInsertRestrictions = Context.Model.GetRecord<InsertRestrictionsType>(EntitySet, CapabilitiesConstants.InsertRestrictions);
+            _insertRestrictions?.MergePropertiesIfNull(entityInsertRestrictions);
+            _insertRestrictions ??= entityInsertRestrictions;
         }
 
         /// <inheritdoc/>
@@ -41,13 +42,13 @@ namespace Microsoft.OpenApi.OData.Operation
         {
             // Summary and Description
             string placeHolder = "Add new entity to " + EntitySet.Name;
-            operation.Summary = InsertRestrictions?.Description ?? placeHolder;
-            operation.Description = InsertRestrictions?.LongDescription;
+            operation.Summary = _insertRestrictions?.Description ?? placeHolder;
+            operation.Description = _insertRestrictions?.LongDescription;
 
             // OperationId
             if (Context.Settings.EnableOperationId)
             {
-                string typeName = EntitySet.EntityType().Name;
+                string typeName = EntitySet.EntityType.Name;
                 operation.OperationId = EntitySet.Name + "." + typeName + ".Create" + Utils.UpperFirstChar(typeName);
             }
         }
@@ -73,7 +74,7 @@ namespace Microsoft.OpenApi.OData.Operation
             operation.Responses = new OpenApiResponses
             {
                 {
-                    Constants.StatusCode201,
+                    Context.Settings.UseSuccessStatusCodeRange ? Constants.StatusCodeClass2XX : Constants.StatusCode201,
                     new OpenApiResponse
                     {
                         Description = "Created entity",
@@ -89,29 +90,29 @@ namespace Microsoft.OpenApi.OData.Operation
 
         protected override void SetSecurity(OpenApiOperation operation)
         {
-            if (InsertRestrictions?.Permissions == null)
+            if (_insertRestrictions?.Permissions == null)
             {
                 return;
             }
 
-            operation.Security = Context.CreateSecurityRequirements(InsertRestrictions.Permissions).ToList();
+            operation.Security = Context.CreateSecurityRequirements(_insertRestrictions.Permissions).ToList();
         }
 
         protected override void AppendCustomParameters(OpenApiOperation operation)
         {
-            if (InsertRestrictions == null)
+            if (_insertRestrictions == null)
             {
                 return;
             }
 
-            if (InsertRestrictions.CustomQueryOptions != null)
+            if (_insertRestrictions.CustomQueryOptions != null)
             {
-                AppendCustomParameters(operation, InsertRestrictions.CustomQueryOptions, ParameterLocation.Query);
+                AppendCustomParameters(operation, _insertRestrictions.CustomQueryOptions, ParameterLocation.Query);
             }
 
-            if (InsertRestrictions.CustomHeaders != null)
+            if (_insertRestrictions.CustomHeaders != null)
             {
-                AppendCustomParameters(operation, InsertRestrictions.CustomHeaders, ParameterLocation.Header);
+                AppendCustomParameters(operation, _insertRestrictions.CustomHeaders, ParameterLocation.Header);
             }
         }
 
@@ -124,10 +125,10 @@ namespace Microsoft.OpenApi.OData.Operation
             OpenApiSchema schema = GetEntitySchema();
             var content = new Dictionary<string, OpenApiMediaType>();
 
-            if (EntitySet.EntityType().HasStream)
+            if (EntitySet.EntityType.HasStream)
             {
-                IEnumerable<string> mediaTypes = Context.Model.GetCollection(EntitySet.EntityType(),
-                    CapabilitiesConstants.AcceptableMediaTypes);
+                IEnumerable<string> mediaTypes = Context.Model.GetCollection(EntitySet.EntityType,
+                    CoreConstants.AcceptableMediaTypes);
 
                 if (mediaTypes != null)
                 {
@@ -138,7 +139,7 @@ namespace Microsoft.OpenApi.OData.Operation
                 }
                 else
                 {
-                    // Default content type
+                    // Default stream content type
                     content.Add(Constants.ApplicationOctetStreamMediaType, new OpenApiMediaType
                     {
                         Schema = new OpenApiSchema
@@ -149,11 +150,29 @@ namespace Microsoft.OpenApi.OData.Operation
                     });
                 }
             }
-
-            content.Add(Constants.ApplicationJsonMediaType, new OpenApiMediaType
+            else
             {
-                Schema = schema
-            });
+                // Add the annotated request content media types
+                IEnumerable<string> mediaTypes = _insertRestrictions?.RequestContentTypes;
+                if (mediaTypes != null)
+                {
+                    foreach (string mediaType in mediaTypes)
+                    {
+                        content.Add(mediaType, new OpenApiMediaType
+                        {
+                            Schema = schema
+                        });
+                    }
+                }
+                else
+                {
+                    // Default content type
+                    content.Add(Constants.ApplicationJsonMediaType, new OpenApiMediaType
+                    {
+                        Schema = schema
+                    });
+                }                
+            }            
 
             return content;
         }
@@ -168,7 +187,7 @@ namespace Microsoft.OpenApi.OData.Operation
 
             if (Context.Settings.EnableDerivedTypesReferencesForRequestBody)
             {
-                schema = EdmModelHelper.GetDerivedTypesReferenceSchema(EntitySet.EntityType(), Context.Model);
+                schema = EdmModelHelper.GetDerivedTypesReferenceSchema(EntitySet.EntityType, Context.Model);
             }
 
             if (schema == null)
@@ -179,7 +198,7 @@ namespace Microsoft.OpenApi.OData.Operation
                     Reference = new OpenApiReference
                     {
                         Type = ReferenceType.Schema,
-                        Id = EntitySet.EntityType().FullName()
+                        Id = EntitySet.EntityType.FullName()
                     }
                 };
             }

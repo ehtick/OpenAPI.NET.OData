@@ -16,15 +16,18 @@ namespace Microsoft.OpenApi.OData.Operation.Tests
         private RefGetOperationHandler _operationHandler = new RefGetOperationHandler();
 
         [Theory]
-        [InlineData(true)]
-        [InlineData(false)]
-        public void CreateNavigationRefGetOperationReturnsCorrectOperation(bool enableOperationId)
+        [InlineData(true, true)]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        [InlineData(false, false)]
+        public void CreateNavigationRefGetOperationReturnsCorrectOperation(bool enableOperationId, bool useHTTPStatusCodeClass2XX)
         {
             // Arrange
             IEdmModel model = EdmModelHelper.TripServiceModel;
             OpenApiConvertSettings settings = new OpenApiConvertSettings
             {
-                EnableOperationId = enableOperationId
+                EnableOperationId = enableOperationId,
+                UseSuccessStatusCodeRange = useHTTPStatusCodeClass2XX
             };
             ODataContext context = new ODataContext(model, settings);
             IEdmEntitySet people = model.EntityContainer.FindEntitySet("People");
@@ -33,7 +36,7 @@ namespace Microsoft.OpenApi.OData.Operation.Tests
             IEdmEntityType person = model.SchemaElements.OfType<IEdmEntityType>().First(c => c.Name == "Person");
             IEdmNavigationProperty navProperty = person.DeclaredNavigationProperties().First(c => c.Name == "Trips");
             ODataPath path = new ODataPath(new ODataNavigationSourceSegment(people),
-                new ODataKeySegment(people.EntityType()),
+                new ODataKeySegment(people.EntityType),
                 new ODataNavigationPropertySegment(navProperty),
                 ODataRefSegment.Instance);
 
@@ -49,12 +52,13 @@ namespace Microsoft.OpenApi.OData.Operation.Tests
             Assert.Equal("People.Trip", tag.Name);
 
             Assert.NotNull(operation.Parameters);
-            Assert.Equal(7, operation.Parameters.Count);
+            Assert.Equal(8, operation.Parameters.Count);
 
             Assert.Null(operation.RequestBody);
 
             Assert.Equal(2, operation.Responses.Count);
-            Assert.Equal(new string[] { "200", "default" }, operation.Responses.Select(e => e.Key));
+            var statusCode = useHTTPStatusCodeClass2XX ? "2XX" : "200";
+            Assert.Equal(new string[] { statusCode, "default" }, operation.Responses.Select(e => e.Key));
 
             if (enableOperationId)
             {

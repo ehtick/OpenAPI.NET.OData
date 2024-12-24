@@ -29,7 +29,7 @@ namespace Microsoft.OpenApi.OData.Operation.Tests
 
             IEdmAction action = model.SchemaElements.OfType<IEdmAction>().First(f => f.Name == "ShareTrip");
             Assert.NotNull(action);
-            ODataPath path = new ODataPath(new ODataNavigationSourceSegment(people), new ODataKeySegment(people.EntityType()), new ODataOperationSegment(action));
+            ODataPath path = new ODataPath(new ODataNavigationSourceSegment(people), new ODataKeySegment(people.EntityType), new ODataOperationSegment(action));
 
             // Act
             var operation = _operationHandler.CreateOperation(context, path);
@@ -40,21 +40,24 @@ namespace Microsoft.OpenApi.OData.Operation.Tests
             Assert.Equal("Details of the shared trip.", operation.Description);
             Assert.NotNull(operation.Tags);
             var tag = Assert.Single(operation.Tags);
-            Assert.Equal("People.Actions", tag.Name);
+            Assert.Equal("People.Person", tag.Name);
 
             Assert.NotNull(operation.Parameters);
-            Assert.Equal(1, operation.Parameters.Count);
+            Assert.Single(operation.Parameters);
             Assert.Equal(new string[] { "UserName" }, operation.Parameters.Select(p => p.Name));
 
             Assert.NotNull(operation.RequestBody);
-            Assert.Equal("Action parameters", operation.RequestBody.Description);
+            if (operation.RequestBody.Reference != null)
+                Assert.Equal("ShareTripRequestBody", operation.RequestBody.Reference.Id);
+            else
+                Assert.Equal("Action parameters", operation.RequestBody.Description);
 
             Assert.Equal(2, operation.Responses.Count);
             Assert.Equal(new string[] { "204", "default" }, operation.Responses.Select(e => e.Key));
         }
 
         [Fact]
-        public void CreateOperationForEdmActionReturnsCorrectOperationHierarhicalClass()
+        public void CreateOperationForEdmActionReturnsCorrectOperationHierarchicalClass()
         {
             // Arrange
             IEdmModel model = EdmModelHelper.ContractServiceModel;
@@ -66,7 +69,7 @@ namespace Microsoft.OpenApi.OData.Operation.Tests
 
             IEdmAction action = model.SchemaElements.OfType<IEdmAction>().First(f => f.Name == actionName);
             Assert.NotNull(action);
-            ODataPath path = new ODataPath(new ODataNavigationSourceSegment(entitySet), new ODataKeySegment(entitySet.EntityType()), new ODataOperationSegment(action));
+            ODataPath path = new ODataPath(new ODataNavigationSourceSegment(entitySet), new ODataKeySegment(entitySet.EntityType), new ODataOperationSegment(action));
 
             // Act
             var operation = _operationHandler.CreateOperation(context, path);
@@ -76,10 +79,10 @@ namespace Microsoft.OpenApi.OData.Operation.Tests
             Assert.Equal($"Invoke action {actionName}", operation.Summary);
             Assert.NotNull(operation.Tags);
             var tag = Assert.Single(operation.Tags);
-            Assert.Equal($"{entitySetName}.Actions", tag.Name);
+            Assert.Equal($"{entitySetName}.AccountApiModel", tag.Name);
 
             Assert.NotNull(operation.Parameters);
-            Assert.Equal(1, operation.Parameters.Count);
+            Assert.Single(operation.Parameters);
             Assert.Equal(new string[] { "id" }, operation.Parameters.Select(p => p.Name));
 
             Assert.NotNull(operation.RequestBody);
@@ -167,7 +170,7 @@ namespace Microsoft.OpenApi.OData.Operation.Tests
 
             ODataPath path = new ODataPath(new ODataNavigationSourceSegment(customers),
                 new ODataKeySegment(customer),
-                new ODataTypeCastSegment(vipCustomer),
+                new ODataTypeCastSegment(vipCustomer, model),
                 new ODataOperationSegment(action));
 
             // Act
@@ -294,6 +297,92 @@ namespace Microsoft.OpenApi.OData.Operation.Tests
             else
             {
                 Assert.Empty(operation.Security);
+            }
+        }
+
+        [Theory]
+        [InlineData("getMailTips", true)] // returns collection
+        [InlineData("getMailTips", false)] // returns collection
+        [InlineData("findMeetingTimes", true)] // does not return collection
+        public void CreateOperationForEdmActionWithCollectionReturnTypeContainsXMsPageableExtension(string actionName, bool enablePagination)
+        {
+            // Arrange
+            IEdmModel model = EdmModelHelper.GraphBetaModel;
+            OpenApiConvertSettings settings = new()
+            {
+                EnableOperationId = true,
+                EnablePagination = enablePagination
+            };
+            ODataContext context = new(model, settings);
+            IEdmAction action = model.SchemaElements.OfType<IEdmAction>()
+                .First(x => x.Name == actionName &&
+                    x.FindParameter("bindingParameter").Type.Definition.ToString() == "microsoft.graph.user");
+            IEdmEntityContainer container = model.SchemaElements.OfType<IEdmEntityContainer>().First();
+            IEdmEntitySet users = container.FindEntitySet("users");
+            IEdmEntityType user = model.SchemaElements.OfType<IEdmEntityType>().First(x => x.Name == "user");
+
+            ODataPath path = new(new ODataNavigationSourceSegment(users),
+                new ODataKeySegment(user),
+                new ODataOperationSegment(action));
+
+            // Act
+            var operation = _operationHandler.CreateOperation(context, path);
+
+            // Assert
+            if (enablePagination && action.ReturnType.IsCollection())
+            {
+                Assert.True(operation.Extensions.ContainsKey(Common.Constants.xMsPageable));
+            }
+            else
+            {
+                Assert.False(operation.Extensions.ContainsKey(Common.Constants.xMsPageable));
+            }
+        }
+
+        [Theory]
+        [InlineData("assign", true, true)]
+        [InlineData("assign", true, false)]
+        [InlineData("assign", false, false)]
+        public void CreateOperationForEdmActionWithCollectionReturnTypeHasResponseWithNextLinkProperty(string operationName, bool enablePagination, bool enableOdataAnnotationRef)
+        {
+            // Arrange
+            IEdmModel model = EdmModelHelper.GraphBetaModel;
+            OpenApiConvertSettings settings = new()
+            {
+                EnableOperationId = true,
+                EnablePagination = enablePagination,
+                EnableODataAnnotationReferencesForResponses = enableOdataAnnotationRef
+            };
+            ODataContext context = new(model, settings);
+            IEdmAction action = model.SchemaElements.OfType<IEdmAction>()
+                .First(x => x.Name == operationName &&
+                    x.FindParameter("bindingParameter").Type.Definition.ToString() == "microsoft.graph.deviceCompliancePolicy");
+            IEdmEntityContainer container = model.SchemaElements.OfType<IEdmEntityContainer>().First();
+            IEdmSingleton deviceManagement = container.FindSingleton("deviceManagement");
+            IEdmEntityType deviceCompliancePolicy = model.SchemaElements.OfType<IEdmEntityType>().First(x => x.Name == "deviceCompliancePolicy");
+
+            ODataPath path = new(new ODataNavigationSourceSegment(deviceManagement),
+                new ODataKeySegment(deviceCompliancePolicy),
+                new ODataOperationSegment(action));
+
+            // Act
+            var operation = _operationHandler.CreateOperation(context, path);
+            var responseProperties = operation.Responses.First().Value.Content.First().Value.Schema.Properties;
+
+            // Assert
+            if (enablePagination && enableOdataAnnotationRef)
+            {
+                var reference = operation.Responses.First().Value.Content.First().Value.Schema.AllOf.First().Reference.Id;
+                Assert.Equal(Common.Constants.BaseCollectionPaginationCountResponse, reference);
+
+            }
+            else if (enablePagination)
+            { 
+                Assert.True(responseProperties.ContainsKey("@odata.nextLink"));               
+            }
+            else
+            {
+                Assert.False(responseProperties.ContainsKey("@odata.nextLink"));
             }
         }
     }

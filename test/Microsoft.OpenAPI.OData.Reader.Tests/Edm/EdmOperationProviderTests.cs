@@ -31,18 +31,18 @@ namespace Microsoft.OpenApi.OData.Edm.Tests
             IEdmEntitySet entitySet = model.EntityContainer.FindEntitySet("users");
 
             // Act
-            var operations = provider.FindOperations(entitySet.EntityType(), false);
+            var operations = provider.FindOperations(entitySet.EntityType, false);
 
             // Assert
-            Assert.Equal(29, operations.Count());
+            Assert.Equal(30, operations.Count());
 
             // Act
             entitySet = model.EntityContainer.FindEntitySet("directoryObjects");
 
-            operations = provider.FindOperations(entitySet.EntityType(), false);
+            operations = provider.FindOperations(entitySet.EntityType, false);
 
             // Assert
-            Assert.Equal(57, operations.Count());
+            Assert.Equal(58, operations.Count());
         }
     }
 }

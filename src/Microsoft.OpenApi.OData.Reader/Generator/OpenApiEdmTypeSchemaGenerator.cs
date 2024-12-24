@@ -1,4 +1,4 @@
-﻿// ------------------------------------------------------------
+// ------------------------------------------------------------
 //  Copyright (c) Microsoft Corporation.  All rights reserved.
 //  Licensed under the MIT License (MIT). See LICENSE in the repo root for license information.
 // ------------------------------------------------------------
@@ -34,13 +34,20 @@ namespace Microsoft.OpenApi.OData.Generator
 
             switch (edmTypeReference.TypeKind())
             {
-                case EdmTypeKind.Collection:
-                    // Collection-valued structural and navigation are represented as Schema Objects of type array.
-                    // The value of the items keyword is a Schema Object specifying the type of the items. 
+                // Collection-valued structural and navigation are represented as Schema Objects of type array.
+                // The value of the items keyword is a Schema Object specifying the type of the items.
+                case EdmTypeKind.Collection:  
+                    
+                    IEdmTypeReference typeRef = edmTypeReference.AsCollection().ElementType();
+                    OpenApiSchema schema;
+                    schema = typeRef.TypeKind() == EdmTypeKind.Complex || typeRef.TypeKind() == EdmTypeKind.Entity
+                        ? context.CreateStructuredTypeSchema(typeRef.AsStructured(), true)
+                        : context.CreateEdmTypeSchema(typeRef);
+
                     return new OpenApiSchema
                     {
                         Type = "array",
-                        Items = context.CreateEdmTypeSchema(edmTypeReference.AsCollection().ElementType())
+                        Items = schema
                     };
 
                 // Complex, enum, entity, entity reference are represented as JSON References to the Schema Object of the complex,
@@ -64,6 +71,9 @@ namespace Microsoft.OpenApi.OData.Generator
 
                 case EdmTypeKind.EntityReference:
                     return context.CreateTypeDefinitionSchema(edmTypeReference.AsTypeDefinition());
+
+                case EdmTypeKind.Untyped:
+                    return new OpenApiSchema();
 
                 case EdmTypeKind.None:
                 default:
@@ -123,7 +133,8 @@ namespace Microsoft.OpenApi.OData.Generator
                 }
 
                 // Nullable properties are marked with the keyword nullable and a value of true.
-                schema.Nullable = primitiveType.IsNullable ? true : false;
+                // nullable cannot be true when type is empty, often common in anyof/allOf since individual entries are nullable
+                schema.Nullable = !string.IsNullOrEmpty(schema.Type) && primitiveType.IsNullable;
             }
 
             return schema;
@@ -147,10 +158,11 @@ namespace Microsoft.OpenApi.OData.Generator
                 OneOf = null,
                 AnyOf = null
             };
+
             switch (primitiveType.PrimitiveKind)
             {
                 case EdmPrimitiveTypeKind.Binary: // binary
-                    schema.Type = "string";
+                    schema.Type = Constants.StringType;
                     schema.Format = "base64url";
                     break;
                 case EdmPrimitiveTypeKind.Boolean: // boolean
@@ -158,76 +170,74 @@ namespace Microsoft.OpenApi.OData.Generator
                     schema.Default = new OpenApiBoolean(false);
                     break;
                 case EdmPrimitiveTypeKind.Byte: // byte
-                    schema.Type = "integer";
+                    schema.Type = Constants.NumberType;
                     schema.Format = "uint8";
                     break;
                 case EdmPrimitiveTypeKind.DateTimeOffset: // datetime offset
-                    schema.Type = "string";
+                    schema.Type = Constants.StringType;
                     schema.Format = "date-time";
                     schema.Pattern = "^[0-9]{4,}-(0[1-9]|1[012])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]([.][0-9]{1,12})?(Z|[+-][0-9][0-9]:[0-9][0-9])$";
                     break;
                 case EdmPrimitiveTypeKind.Decimal: // decimal
                     if (context.Settings.IEEE754Compatible)
                     {
-                        schema.AnyOf = new List<OpenApiSchema>
+                        schema.OneOf = new List<OpenApiSchema>
                         {
-                            new OpenApiSchema { Type = "number" },
-                            new OpenApiSchema { Type = "string" },
+                            new OpenApiSchema { Type = Constants.NumberType, Format = Constants.DecimalFormat, Nullable = true },
+                            new OpenApiSchema { Type = Constants.StringType, Nullable = true },
                         };
                     }
                     else
                     {
-                        schema.Type = "number";
+                        schema.Type = Constants.NumberType;
+                        schema.Format = Constants.DecimalFormat;
                     }
-                    schema.Format = "decimal";
                     break;
                 case EdmPrimitiveTypeKind.Double: // double
-                    schema.AnyOf = new List<OpenApiSchema>
+                    schema.OneOf = new List<OpenApiSchema>
                     {
-                        new OpenApiSchema { Type = "number" },
-                        new OpenApiSchema { Type = "string" },
+                        new OpenApiSchema { Type = Constants.NumberType, Format = "double", Nullable = true },
+                        new OpenApiSchema { Type = Constants.StringType, Nullable = true },
                         new OpenApiSchema
                         {
-                            Enum = new List<IOpenApiAny>
+                            UnresolvedReference = true,
+                            Reference = new OpenApiReference
                             {
-                                new OpenApiString("-INF"),
-                                new OpenApiString("INF"),
-                                new OpenApiString("NaN")
+                                Type = ReferenceType.Schema,
+                                Id = Constants.ReferenceNumericName
                             }
                         }
                     };
-                    schema.Format = "double";
                     break;
                 case EdmPrimitiveTypeKind.Single: // single
-                    schema.AnyOf = new List<OpenApiSchema>
+                    schema.OneOf = new List<OpenApiSchema>
                     {
-                        new OpenApiSchema { Type = "number" },
-                        new OpenApiSchema { Type = "string" },
+                        new OpenApiSchema { Type = Constants.NumberType, Format = "float", Nullable = true },
+                        new OpenApiSchema { Type = Constants.StringType, Nullable = true },
                         new OpenApiSchema
                         {
-                            Enum = new List<IOpenApiAny>
+                            UnresolvedReference = true,
+                            Reference = new OpenApiReference
                             {
-                                new OpenApiString("-INF"),
-                                new OpenApiString("INF"),
-                                new OpenApiString("NaN")
+                                Type = ReferenceType.Schema,
+                                Id = Constants.ReferenceNumericName
                             }
                         }
                     };
-                    schema.Format = "float";
                     break;
                 case EdmPrimitiveTypeKind.Guid: // guid
-                    schema.Type = "string";
+                    schema.Type = Constants.StringType;
                     schema.Format = "uuid";
                     schema.Pattern = "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$";
                     break;
                 case EdmPrimitiveTypeKind.Int16:
-                    schema.Type = "integer";
+                    schema.Type = Constants.NumberType;
                     schema.Format = "int16";
                     schema.Minimum = Int16.MinValue; // -32768
                     schema.Maximum = Int16.MaxValue; // 32767
                     break;
                 case EdmPrimitiveTypeKind.Int32:
-                    schema.Type = "integer";
+                    schema.Type = Constants.NumberType;
                     schema.Format = "int32";
                     schema.Minimum = Int32.MinValue; // -2147483648
                     schema.Maximum = Int32.MaxValue; // 2147483647
@@ -235,44 +245,43 @@ namespace Microsoft.OpenApi.OData.Generator
                 case EdmPrimitiveTypeKind.Int64:
                     if (context.Settings.IEEE754Compatible)
                     {
-                        schema.AnyOf = new List<OpenApiSchema>
+                        schema.OneOf = new List<OpenApiSchema>
                         {
-                            new OpenApiSchema { Type = "integer" },
-                            new OpenApiSchema { Type = "string" }
+                            new OpenApiSchema { Type = Constants.NumberType, Format = Constants.Int64Format, Nullable = true },
+                            new OpenApiSchema { Type = Constants.StringType, Nullable = true }
                         };
                     }
                     else
                     {
-                        schema.Type = "integer";
+                        schema.Type = Constants.NumberType;
+                        schema.Format = Constants.Int64Format;
                     }
-
-                    schema.Format = "int64";
                     break;
                 case EdmPrimitiveTypeKind.SByte:
-                    schema.Type = "integer";
+                    schema.Type = Constants.NumberType;
                     schema.Format = "int8";
                     schema.Minimum = SByte.MinValue; // -128
                     schema.Maximum = SByte.MaxValue; // 127
                     break;
                 case EdmPrimitiveTypeKind.String: // string
-                    schema.Type = "string";
+                    schema.Type = Constants.StringType;
                     break;
                 case EdmPrimitiveTypeKind.Stream: // stream
-                    schema.Type = "string";
+                    schema.Type = Constants.StringType;
                     schema.Format = "base64url";
                     break;
                 case EdmPrimitiveTypeKind.Duration: // duration
-                    schema.Type = "string";
+                    schema.Type = Constants.StringType;
                     schema.Format = "duration";
                     schema.Pattern = "^-?P([0-9]+D)?(T([0-9]+H)?([0-9]+M)?([0-9]+([.][0-9]+)?S)?)?$";
                     break;
                 case EdmPrimitiveTypeKind.Date:
-                    schema.Type = "string";
+                    schema.Type = Constants.StringType;
                     schema.Format = "date";
                     schema.Pattern = "^[0-9]{4,}-(0[1-9]|1[012])-(0[1-9]|[12][0-9]|3[01])$";
                     break;
                 case EdmPrimitiveTypeKind.TimeOfDay:
-                    schema.Type = "string";
+                    schema.Type = Constants.StringType;
                     schema.Format = "time";
                     schema.Pattern = "^([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]([.][0-9]{1,12})?$";
                     break;
@@ -420,10 +429,9 @@ namespace Microsoft.OpenApi.OData.Generator
             Debug.Assert(typeReference != null);
 
             OpenApiSchema schema = new OpenApiSchema();
-            schema.Nullable = typeReference.IsNullable;
             schema.Reference = null;
 
-            if (context.Settings.OpenApiSpecVersion >= OpenApiSpecVersion.OpenApi3_0)
+            if (typeReference.IsNullable && context.Settings.OpenApiSpecVersion >= OpenApiSpecVersion.OpenApi3_0)
             {
                 schema.AnyOf = new List<OpenApiSchema>
                 {
@@ -435,6 +443,11 @@ namespace Microsoft.OpenApi.OData.Generator
                             Type = ReferenceType.Schema,
                             Id = typeReference.Definition.FullTypeName()
                         }
+                    },
+                    new OpenApiSchema
+                    {
+                        Type = "object",
+                        Nullable = true
                     }
                 };
             }
@@ -448,23 +461,24 @@ namespace Microsoft.OpenApi.OData.Generator
                     Id = typeReference.Definition.FullTypeName()
                 };
                 schema.UnresolvedReference = true;
+                schema.Nullable = typeReference.IsNullable;
             }
 
             return schema;
         }
 
-        private static OpenApiSchema CreateStructuredTypeSchema(this ODataContext context, IEdmStructuredTypeReference typeReference)
+        private static OpenApiSchema CreateStructuredTypeSchema(this ODataContext context, IEdmStructuredTypeReference typeReference, bool isTypeCollection = false)
         {
             Debug.Assert(context != null);
             Debug.Assert(typeReference != null);
 
             OpenApiSchema schema = new OpenApiSchema();
-            schema.Nullable = typeReference.IsNullable;
 
             // AnyOf will only be valid openApi for version 3
             // otherwise the reference should be set directly
             // as per OASIS documentation for openApi version 2
-            if (typeReference.IsNullable && 
+            // Collections of structured types cannot be nullable
+            if (typeReference.IsNullable && !isTypeCollection &&
                 (context.Settings.OpenApiSpecVersion >= OpenApiSpecVersion.OpenApi3_0))
             {
                 schema.Reference = null;
@@ -478,6 +492,11 @@ namespace Microsoft.OpenApi.OData.Generator
                             Type = ReferenceType.Schema,
                             Id = typeReference.Definition.FullTypeName()
                         }
+                    },
+                    new OpenApiSchema
+                    {
+                        Type = "object",
+                        Nullable = true
                     }
                 };
             }
@@ -491,6 +510,7 @@ namespace Microsoft.OpenApi.OData.Generator
                     Id = typeReference.Definition.FullTypeName()
                 };
                 schema.UnresolvedReference = true;
+                schema.Nullable = typeReference.IsNullable;
             }
 
             return schema;
@@ -502,10 +522,9 @@ namespace Microsoft.OpenApi.OData.Generator
             Debug.Assert(reference != null);
 
             OpenApiSchema schema = new OpenApiSchema();
-            schema.Nullable = reference.IsNullable;
             schema.Reference = null;
 
-            if (context.Settings.OpenApiSpecVersion >= OpenApiSpecVersion.OpenApi3_0)
+            if (reference.IsNullable && context.Settings.OpenApiSpecVersion >= OpenApiSpecVersion.OpenApi3_0)
             {
                 schema.AnyOf = new List<OpenApiSchema>
                 {
@@ -517,6 +536,11 @@ namespace Microsoft.OpenApi.OData.Generator
                             Type = ReferenceType.Schema,
                             Id = reference.Definition.FullTypeName()
                         }
+                    },
+                    new OpenApiSchema
+                    {
+                        Type = "object",
+                        Nullable = true
                     }
                 };
             }
@@ -530,6 +554,7 @@ namespace Microsoft.OpenApi.OData.Generator
                     Id = reference.Definition.FullTypeName()
                 };
                 schema.UnresolvedReference = true;
+                schema.Nullable = reference.IsNullable;
             }
             
 

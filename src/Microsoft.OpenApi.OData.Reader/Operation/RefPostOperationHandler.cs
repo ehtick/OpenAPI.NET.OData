@@ -3,11 +3,12 @@
 //  Licensed under the MIT License (MIT). See LICENSE in the repo root for license information.
 // ------------------------------------------------------------
 
-using System.Collections.Generic;
 using System.Linq;
 using Microsoft.OpenApi.Models;
 using Microsoft.OpenApi.OData.Common;
+using Microsoft.OpenApi.OData.Edm;
 using Microsoft.OpenApi.OData.Generator;
+using Microsoft.OpenApi.OData.Vocabulary.Capabilities;
 
 namespace Microsoft.OpenApi.OData.Operation
 {
@@ -18,46 +19,41 @@ namespace Microsoft.OpenApi.OData.Operation
     {
         /// <inheritdoc/>
         public override OperationType OperationType => OperationType.Post;
+        private InsertRestrictionsType _insertRestriction;
+
+        /// <inheritdoc/>
+        protected override void Initialize(ODataContext context, ODataPath path)
+        {
+            base.Initialize(context, path);
+            _insertRestriction = GetRestrictionAnnotation(CapabilitiesConstants.InsertRestrictions) as InsertRestrictionsType;
+        }
 
         /// <inheritdoc/>
         protected override void SetBasicInfo(OpenApiOperation operation)
         {
             // Summary and Description
             string placeHolder = "Create new navigation property ref to " + NavigationProperty.Name + " for " + NavigationSource.Name;
-            operation.Summary = Restriction?.InsertRestrictions?.Description ?? placeHolder;
-            operation.Description = Restriction?.InsertRestrictions?.LongDescription;
+            operation.Summary = _insertRestriction?.Description ?? placeHolder;
+            operation.Description = _insertRestriction?.LongDescription;
 
             // OperationId
             if (Context.Settings.EnableOperationId)
             {
                 string prefix = "CreateRef";
                 operation.OperationId = GetOperationId(prefix);
-            }
-
-            
+            }            
         }
 
         /// <inheritdoc/>
         protected override void SetRequestBody(OpenApiOperation operation)
         {
-            OpenApiSchema schema = new OpenApiSchema
-            {
-                Type = "object",
-                AdditionalProperties = new OpenApiSchema { Type = "object" }
-            };
-
             operation.RequestBody = new OpenApiRequestBody
             {
-                Required = true,
-                Description = "New navigation property ref value",
-                Content = new Dictionary<string, OpenApiMediaType>
+                UnresolvedReference = true,
+                Reference = new OpenApiReference
                 {
-                    {
-                        Constants.ApplicationJsonMediaType, new OpenApiMediaType
-                        {
-                            Schema = schema
-                        }
-                    }
+                    Type = ReferenceType.RequestBody,
+                    Id = Constants.ReferencePostRequestBodyName
                 }
             };
 
@@ -67,29 +63,11 @@ namespace Microsoft.OpenApi.OData.Operation
         /// <inheritdoc/>
         protected override void SetResponses(OpenApiOperation operation)
         {
-            OpenApiSchema schema = new OpenApiSchema
-            {
-                Type = "object"
-            };
-
             operation.Responses = new OpenApiResponses
             {
                 {
-                    Constants.StatusCode201,
-                    new OpenApiResponse
-                    {
-                        Description = "Created navigation property link.",
-                        Content = new Dictionary<string, OpenApiMediaType>
-                        {
-                            {
-                                Constants.ApplicationJsonMediaType,
-                                new OpenApiMediaType
-                                {
-                                    Schema = schema
-                                }
-                            }
-                        }
-                    }
+                    Constants.StatusCode204,
+                    new OpenApiResponse { Description = "Success" } 
                 }
             };
 
@@ -100,29 +78,29 @@ namespace Microsoft.OpenApi.OData.Operation
 
         protected override void SetSecurity(OpenApiOperation operation)
         {
-            if (Restriction == null || Restriction.InsertRestrictions == null)
+            if (_insertRestriction == null)
             {
                 return;
             }
 
-            operation.Security = Context.CreateSecurityRequirements(Restriction.InsertRestrictions.Permissions).ToList();
+            operation.Security = Context.CreateSecurityRequirements(_insertRestriction.Permissions).ToList();
         }
 
         protected override void AppendCustomParameters(OpenApiOperation operation)
         {
-            if (Restriction == null || Restriction.InsertRestrictions == null)
+            if (_insertRestriction == null)
             {
                 return;
             }
 
-            if (Restriction.InsertRestrictions.CustomHeaders != null)
+            if (_insertRestriction.CustomHeaders != null)
             {
-                AppendCustomParameters(operation, Restriction.InsertRestrictions.CustomHeaders, ParameterLocation.Header);
+                AppendCustomParameters(operation, _insertRestriction.CustomHeaders, ParameterLocation.Header);
             }
 
-            if (Restriction.InsertRestrictions.CustomQueryOptions != null)
+            if (_insertRestriction.CustomQueryOptions != null)
             {
-                AppendCustomParameters(operation, Restriction.InsertRestrictions.CustomQueryOptions, ParameterLocation.Query);
+                AppendCustomParameters(operation, _insertRestriction.CustomQueryOptions, ParameterLocation.Query);
             }
         }
     }

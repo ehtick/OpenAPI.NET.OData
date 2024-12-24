@@ -3,11 +3,13 @@
 //  Licensed under the MIT License (MIT). See LICENSE in the repo root for license information.
 // ------------------------------------------------------------
 
-using System.Linq;
 using Microsoft.OData.Edm;
 using Microsoft.OpenApi.Models;
 using Microsoft.OpenApi.OData.Common;
+using Microsoft.OpenApi.OData.Edm;
 using Microsoft.OpenApi.OData.Generator;
+using Microsoft.OpenApi.OData.Vocabulary.Capabilities;
+using System.Linq;
 
 namespace Microsoft.OpenApi.OData.Operation
 {
@@ -18,20 +20,42 @@ namespace Microsoft.OpenApi.OData.Operation
     {
         /// <inheritdoc/>
         public override OperationType OperationType => OperationType.Delete;
+        private DeleteRestrictionsType _deleteRestriction;
+
+        /// <inheritdoc/>
+        protected override void Initialize(ODataContext context, ODataPath path)
+        {
+            base.Initialize(context, path);
+            _deleteRestriction = GetRestrictionAnnotation(CapabilitiesConstants.DeleteRestrictions) as DeleteRestrictionsType;
+        }
 
         /// <inheritdoc/>
         protected override void SetBasicInfo(OpenApiOperation operation)
         {
             // Summary and Description
             string placeHolder = "Delete ref of navigation property " + NavigationProperty.Name + " for " + NavigationSource.Name;
-            operation.Summary = Restriction?.DeleteRestrictions?.Description ?? placeHolder;
-            operation.Description = Restriction?.DeleteRestrictions?.LongDescription;
+            operation.Summary = _deleteRestriction?.Description ?? placeHolder;
+            operation.Description = _deleteRestriction?.LongDescription;
 
             // OperationId
             if (Context.Settings.EnableOperationId)
             {
                 string prefix = "DeleteRef";
-                operation.OperationId = GetOperationId(prefix);
+                var segments = GetOperationId().Split('.').ToList();
+                
+                if (SecondLastSegmentIsKeySegment)
+                {
+                    segments[segments.Count - 1] = Utils.ToFirstCharacterLowerCase(segments[segments.Count - 1]);
+                    var lastSegment = prefix + Utils.UpperFirstChar(NavigationProperty.ToEntityType().Name);
+                    segments.Add(lastSegment);
+                    operation.OperationId = string.Join(".", segments);
+                }
+                else
+                {
+                    var lastSegment = segments.LastOrDefault();
+                    segments[segments.Count - 1] = prefix + lastSegment;
+                    operation.OperationId = string.Join(".", segments);
+                }
             }            
         }
 
@@ -52,13 +76,15 @@ namespace Microsoft.OpenApi.OData.Operation
             });
 
             // for collection, we should have @id in query
-            if (NavigationProperty.TargetMultiplicity() == EdmMultiplicity.Many)
+            if (NavigationProperty.TargetMultiplicity() == EdmMultiplicity.Many &&
+                Path.Segments.Reverse().Skip(1).First() is ODataNavigationPropertySegment)
             {
                 operation.Parameters.Add(new OpenApiParameter
                 {
                     Name = "@id",
                     In = ParameterLocation.Query,
-                    Description = "Delete Uri",
+                    Description = "The delete Uri",
+                    Required = true,
                     Schema = new OpenApiSchema
                     {
                         Type = "string"
@@ -70,36 +96,40 @@ namespace Microsoft.OpenApi.OData.Operation
         /// <inheritdoc/>
         protected override void SetSecurity(OpenApiOperation operation)
         {
-            if (Restriction == null || Restriction.DeleteRestrictions == null)
+            if (_deleteRestriction == null)
             {
                 return;
             }
 
-            operation.Security = Context.CreateSecurityRequirements(Restriction.DeleteRestrictions.Permissions).ToList();
+            operation.Security = Context.CreateSecurityRequirements(_deleteRestriction.Permissions).ToList();
         }
 
         /// <inheritdoc/>
         protected override void SetResponses(OpenApiOperation operation)
         {
-    		operation.AddErrorResponses(Context.Settings, true);
+            // Response for Delete methods should be 204 No Content
+            OpenApiConvertSettings settings = Context.Settings.Clone();
+            settings.UseSuccessStatusCodeRange = false;
+            
+            operation.AddErrorResponses(settings, true);
             base.SetResponses(operation);
         }
 
         protected override void AppendCustomParameters(OpenApiOperation operation)
         {
-            if (Restriction == null || Restriction.DeleteRestrictions == null)
+            if (_deleteRestriction == null)
             {
                 return;
             }
 
-            if (Restriction.DeleteRestrictions.CustomHeaders != null)
+            if (_deleteRestriction.CustomHeaders != null)
             {
-                AppendCustomParameters(operation, Restriction.DeleteRestrictions.CustomHeaders, ParameterLocation.Header);
+                AppendCustomParameters(operation, _deleteRestriction.CustomHeaders, ParameterLocation.Header);
             }
 
-            if (Restriction.DeleteRestrictions.CustomQueryOptions != null)
+            if (_deleteRestriction.CustomQueryOptions != null)
             {
-                AppendCustomParameters(operation, Restriction.DeleteRestrictions.CustomQueryOptions, ParameterLocation.Query);
+                AppendCustomParameters(operation, _deleteRestriction.CustomQueryOptions, ParameterLocation.Query);
             }
         }
     }

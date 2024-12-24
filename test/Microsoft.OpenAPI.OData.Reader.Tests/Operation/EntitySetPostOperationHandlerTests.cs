@@ -10,7 +10,8 @@ using Microsoft.OpenApi.Models;
 using Microsoft.OpenApi.OData.Common;
 using Microsoft.OpenApi.OData.Edm;
 using Microsoft.OpenApi.OData.Tests;
-using Microsoft.OpenApi.OData.Vocabulary.Capabilities;
+using Microsoft.OpenApi.OData.Vocabulary.Core;
+using System.Linq;
 using System.Xml.Linq;
 using Xunit;
 
@@ -21,14 +22,14 @@ namespace Microsoft.OpenApi.OData.Operation.Tests
         private EntitySetPostOperationHandler _operationHandler = new EntitySetPostOperationHandler();
 
         [Theory]
-        [InlineData(true, true)]
-        [InlineData(false, true)]
-        [InlineData(true, false)]
-        [InlineData(false, false)]
-        public void CreateEntitySetPostOperationReturnsCorrectOperation(bool enableOperationId, bool hasStream)
+        [InlineData(true, true, true)]
+        [InlineData(false, true, true)]
+        [InlineData(true, false, false)]
+        [InlineData(false, false, false)]
+        public void CreateEntitySetPostOperationReturnsCorrectOperation(bool enableOperationId, bool hasStream, bool useHTTPStatusCodeClass2XX)
         {
             // Arrange
-            string qualifiedName = CapabilitiesConstants.AcceptableMediaTypes;
+            string qualifiedName = CoreConstants.AcceptableMediaTypes;
             string annotation = $@"
             <Annotation Term=""{qualifiedName}"" >
               <Collection>
@@ -37,18 +38,19 @@ namespace Microsoft.OpenApi.OData.Operation.Tests
             </Annotation>";
 
             // Assert
-            VerifyEntitySetPostOperation("", enableOperationId, hasStream);
-            VerifyEntitySetPostOperation(annotation, enableOperationId, hasStream);
+            VerifyEntitySetPostOperation("", enableOperationId, hasStream, useHTTPStatusCodeClass2XX);
+            VerifyEntitySetPostOperation(annotation, enableOperationId, hasStream, useHTTPStatusCodeClass2XX);
         }
 
-        private void VerifyEntitySetPostOperation(string annotation, bool enableOperationId, bool hasStream)
+        private void VerifyEntitySetPostOperation(string annotation, bool enableOperationId, bool hasStream, bool useHTTPStatusCodeClass2XX)
         {
             // Arrange
             IEdmModel model = GetEdmModel(annotation, hasStream);
             IEdmEntitySet entitySet = model.EntityContainer.FindEntitySet("Customers");
             OpenApiConvertSettings settings = new OpenApiConvertSettings
             {
-                EnableOperationId = enableOperationId
+                EnableOperationId = enableOperationId,
+                UseSuccessStatusCodeRange = useHTTPStatusCodeClass2XX
             };
             ODataContext context = new ODataContext(model, settings);
             ODataPath path = new ODataPath(new ODataNavigationSourceSegment(entitySet));
@@ -70,6 +72,7 @@ namespace Microsoft.OpenApi.OData.Operation.Tests
             Assert.NotNull(post.Responses);
             Assert.Equal(2, post.Responses.Count);
 
+            var statusCode = useHTTPStatusCodeClass2XX ? Constants.StatusCodeClass2XX : Constants.StatusCode201;
             if (hasStream)
             {
                 Assert.NotNull(post.RequestBody);
@@ -77,37 +80,33 @@ namespace Microsoft.OpenApi.OData.Operation.Tests
                 if (!string.IsNullOrEmpty(annotation))
                 {
                     // RequestBody
-                    Assert.Equal(2, post.RequestBody.Content.Keys.Count);
+                    Assert.Single(post.RequestBody.Content.Keys);
                     Assert.True(post.RequestBody.Content.ContainsKey("application/todo"));
-                    Assert.True(post.RequestBody.Content.ContainsKey(Constants.ApplicationJsonMediaType));
 
                     // Response
-                    Assert.Equal(2, post.Responses[Constants.StatusCode201].Content.Keys.Count);
-                    Assert.True(post.Responses[Constants.StatusCode201].Content.ContainsKey("application/todo"));
-                    Assert.True(post.Responses[Constants.StatusCode201].Content.ContainsKey(Constants.ApplicationJsonMediaType));
+                    Assert.Single(post.Responses[statusCode].Content.Keys);
+                    Assert.True(post.Responses[statusCode].Content.ContainsKey("application/todo"));
                 }
                 else
                 {
                     // RequestBody
-                    Assert.Equal(2, post.RequestBody.Content.Keys.Count);
+                    Assert.Single(post.RequestBody.Content.Keys);
                     Assert.True(post.RequestBody.Content.ContainsKey(Constants.ApplicationOctetStreamMediaType));
-                    Assert.True(post.RequestBody.Content.ContainsKey(Constants.ApplicationJsonMediaType));
 
                     // Response
-                    Assert.Equal(2, post.Responses[Constants.StatusCode201].Content.Keys.Count);
-                    Assert.True(post.Responses[Constants.StatusCode201].Content.ContainsKey(Constants.ApplicationOctetStreamMediaType));
-                    Assert.True(post.Responses[Constants.StatusCode201].Content.ContainsKey(Constants.ApplicationJsonMediaType));
+                    Assert.Single(post.Responses[statusCode].Content.Keys);
+                    Assert.True(post.Responses[statusCode].Content.ContainsKey(Constants.ApplicationOctetStreamMediaType));
                 }
             }
             else
             {
                 // RequestBody
                 Assert.NotNull(post.RequestBody);
-                Assert.Equal(1, post.RequestBody.Content.Keys.Count);
+                Assert.Single(post.RequestBody.Content.Keys);
                 Assert.True(post.RequestBody.Content.ContainsKey(Constants.ApplicationJsonMediaType));
 
                 // Response
-                Assert.Equal(1, post.Responses[Constants.StatusCode201].Content.Keys.Count);
+                Assert.Single(post.Responses[Constants.StatusCode201].Content.Keys);
                 Assert.True(post.Responses[Constants.StatusCode201].Content.ContainsKey(Constants.ApplicationJsonMediaType));
             }
 
@@ -227,6 +226,27 @@ namespace Microsoft.OpenApi.OData.Operation.Tests
             {
                 Assert.Empty(post.Security);
             }
+        }
+
+        [Fact]
+        public void CreateEntitySetPostOperationReturnsCorrectOperationWithAnnotatedRequestBodyAndResponseContent()
+        {
+            IEdmModel model = OData.Tests.EdmModelHelper.GraphBetaModel;
+            OpenApiConvertSettings settings = new();
+            ODataContext context = new(model, settings);
+            IEdmEntitySet entitySet = model.EntityContainer.FindEntitySet("directoryObjects");
+            Assert.NotNull(entitySet);
+
+            ODataPath path = new(new ODataNavigationSourceSegment(entitySet));
+
+            // Act
+            var operation = _operationHandler.CreateOperation(context, path);
+
+            // Assert
+            Assert.NotNull(operation.RequestBody);
+            Assert.Equal("multipart/form-data", operation.RequestBody.Content.First().Key);
+            Assert.NotNull(operation.Responses);
+            Assert.Equal("multipart/form-data", operation.Responses.First().Value.Content.First().Key);
         }
 
         internal static IEdmModel GetEdmModel(string annotation, bool hasStream = false)

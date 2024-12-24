@@ -1,15 +1,15 @@
-﻿// ------------------------------------------------------------
+// ------------------------------------------------------------
 //  Copyright (c) Microsoft Corporation.  All rights reserved.
 //  Licensed under the MIT License (MIT). See LICENSE in the repo root for license information.
 // ------------------------------------------------------------
 
-using System;
 using Microsoft.OpenApi.Models;
 using Microsoft.OpenApi.OData.Common;
 using Microsoft.OpenApi.OData.Edm;
 using Microsoft.OpenApi.OData.Generator;
 using Microsoft.OpenApi.OData.Operation;
 using Microsoft.OpenApi.OData.Properties;
+using System;
 
 namespace Microsoft.OpenApi.OData.PathItem
 {
@@ -32,6 +32,11 @@ namespace Microsoft.OpenApi.OData.PathItem
         /// Gets the OData Path.
         /// </summary>
         protected ODataPath Path { get; private set; }
+
+        /// <summary>
+        /// Gets the string representation of the Edm target path for annotations.
+        /// </summary>
+        protected string TargetPath;
 
         /// <inheritdoc/>
         public virtual OpenApiPathItem CreatePathItem(ODataContext context, ODataPath path)
@@ -81,6 +86,7 @@ namespace Microsoft.OpenApi.OData.PathItem
             {
                 throw Error.InvalidOperation(String.Format(SRResource.InvalidPathKindForPathItemHandler, GetType().Name, path.Kind));
             }
+            TargetPath = path.GetTargetPath(context.Model);
         }
 
         /// <summary>

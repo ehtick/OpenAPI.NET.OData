@@ -1,4 +1,4 @@
-﻿// ------------------------------------------------------------
+// ------------------------------------------------------------
 //  Copyright (c) Microsoft Corporation.  All rights reserved.
 //  Licensed under the MIT License (MIT). See LICENSE in the repo root for license information.
 // ------------------------------------------------------------
@@ -12,6 +12,7 @@ using Microsoft.OpenApi.OData.Common;
 using Microsoft.OpenApi.OData.Edm;
 using Microsoft.OpenApi.OData.Generator;
 using Microsoft.OpenApi.OData.Vocabulary.Capabilities;
+using Microsoft.OpenApi.OData.Vocabulary.Core;
 
 namespace Microsoft.OpenApi.OData.Operation
 {
@@ -20,6 +21,8 @@ namespace Microsoft.OpenApi.OData.Operation
     /// </summary>
     internal abstract class EdmOperationOperationHandler : OperationHandler
     {
+        private OperationRestrictionsType _operationRestriction;
+
         /// <summary>
         /// Gets the navigation source.
         /// </summary>
@@ -53,6 +56,11 @@ namespace Microsoft.OpenApi.OData.Operation
             EdmOperation = OperationSegment.Operation;
 
             HasTypeCast = path.Segments.Any(s => s is ODataTypeCastSegment);
+
+            _operationRestriction = Context.Model.GetRecord<OperationRestrictionsType>(TargetPath, CapabilitiesConstants.OperationRestrictions);
+            var operationRestrictions = Context.Model.GetRecord<OperationRestrictionsType>(EdmOperation, CapabilitiesConstants.OperationRestrictions);
+            _operationRestriction?.MergePropertiesIfNull(operationRestrictions);
+            _operationRestriction ??= operationRestrictions;
         }
 
         /// <inheritdoc/>
@@ -62,7 +70,7 @@ namespace Microsoft.OpenApi.OData.Operation
             operation.Summary = "Invoke " + (EdmOperation.IsAction() ? "action " : "function ") + EdmOperation.Name;
 
             // Description
-            operation.Description = Context.Model.GetDescriptionAnnotation(EdmOperation);
+            operation.Description = Context.Model.GetDescriptionAnnotation(TargetPath) ?? Context.Model.GetDescriptionAnnotation(EdmOperation);
 
             // OperationId
             if (Context.Settings.EnableOperationId)
@@ -73,35 +81,54 @@ namespace Microsoft.OpenApi.OData.Operation
                 // duplicates in entity vs entityset functions/actions
 
                 List<string> identifiers = new();
+                string pathHash = string.Empty;
                 foreach (ODataSegment segment in Path.Segments)
                 {
-                    if (segment is not ODataKeySegment)
+                    if (segment is ODataKeySegment keySegment)
                     {
+                        if (!keySegment.IsAlternateKey) 
+                        {
+                            identifiers.Add(segment.EntityType.Name);
+                            continue;
+                        }
+
+                        // We'll consider alternate keys in the operation id to eliminate potential duplicates with operation id of primary path
+                        if (segment == Path.Segments.Last())
+                        {
+                            identifiers.Add("By" + string.Join("", keySegment.Identifier.Split(',').Select(static x => Utils.UpperFirstChar(x))));
+                        }
+                        else
+                        {
+                            identifiers.Add(keySegment.Identifier);
+                        }
+                    }
+                    else if (segment is ODataOperationSegment opSegment)
+                    {
+                        if (opSegment.Operation is IEdmFunction function && Context.Model.IsOperationOverload(function))
+                        {
+                            // Hash the segment to avoid duplicate operationIds
+                            pathHash = string.IsNullOrEmpty(pathHash)
+                                ? opSegment.GetPathHash(Context.Settings)
+                                : (pathHash + opSegment.GetPathHash(Context.Settings)).GetHashSHA256()[..4];
+                        }
+
                         identifiers.Add(segment.Identifier);
                     }
                     else
                     {
-                        identifiers.Add(segment.EntityType.Name);
+                        identifiers.Add(segment.Identifier);
                     }
                 }
 
                 string operationId = string.Join(".", identifiers);
 
-                if (EdmOperation.IsAction())
+                if (!string.IsNullOrEmpty(pathHash))
                 {
-                    operation.OperationId = operationId;
+                    operation.OperationId = operationId + "-" + pathHash;
                 }
                 else
                 {
-                    if (Path.LastSegment is ODataOperationSegment operationSegment &&
-                        Context.Model.IsOperationOverload(operationSegment.Operation))
-                    {
-                        operation.OperationId = operationId + "-" + Path.LastSegment.GetPathHash(Context.Settings);
-                    }
-                    else
-                    {
-                        operation.OperationId = operationId;
-                    }
+                    operation.OperationId = operationId;
                 }
             }
 
@@ -111,10 +138,10 @@ namespace Microsoft.OpenApi.OData.Operation
         /// <inheritdoc/>
         protected override void SetTags(OpenApiOperation operation)
         {
-            string value = EdmOperation.IsAction() ? "Actions" : "Functions";
-            OpenApiTag tag = new OpenApiTag
+            GenerateTagName(out string tagName);
+            OpenApiTag tag = new()
             {
-                Name = NavigationSource.Name + "." + value,
+                Name = tagName,
             };
             tag.Extensions.Add(Constants.xMsTocType, new OpenApiString("container"));
             operation.Tags.Add(tag);
@@ -122,6 +149,34 @@ namespace Microsoft.OpenApi.OData.Operation
             Context.AppendTag(tag);
 
             base.SetTags(operation);
+        }
+
+        /// <summary>
+        /// Genrates the tag name for the operation.
+        /// </summary>
+        /// <param name="tagName">The generated tag name.</param>
+        /// <param name="skip">The number of segments to skip.</param>
+        private void GenerateTagName(out string tagName, int skip = 1)
+        {            
+            var targetSegment = Path.Segments.Reverse().Skip(skip).FirstOrDefault();
+
+            switch (targetSegment)
+            {
+                case ODataNavigationPropertySegment:
+                    tagName = EdmModelHelper.GenerateNavigationPropertyPathTagName(Path, Context);
+                    break;
+                case ODataOperationSegment:
+                case ODataOperationImportSegment:
+                // Previous segmment could be a navigation property or a navigation source segment
+                case ODataKeySegment:
+                    skip += 1;
+                    GenerateTagName(out tagName, skip);
+                    break;
+                // ODataNavigationSourceSegment
+                default:
+                    tagName = NavigationSource.Name + "." + NavigationSource.EntityType.Name;
+                    break;
+            }
         }
 
         /// <inheritdoc/>
@@ -132,71 +187,148 @@ namespace Microsoft.OpenApi.OData.Operation
             if (EdmOperation.IsFunction())
             {
                 IEdmFunction function = (IEdmFunction)EdmOperation;
-
-                if (OperationSegment.ParameterMappings != null)
-                {
-                    IList<OpenApiParameter> parameters = Context.CreateParameters(function, OperationSegment.ParameterMappings);
-                    foreach (var parameter in parameters)
-                    {
-                        operation.Parameters.AppendParameter(parameter);
-                    }
-                }
-                else
-                {
-                    IDictionary<string, string> mappings = ParameterMappings[OperationSegment];
-                    IList<OpenApiParameter> parameters = Context.CreateParameters(function, mappings);
-                    if (operation.Parameters == null)
-                    {
-                        operation.Parameters = parameters;
-                    }
-                    else
-                    {
-                        foreach (var parameter in parameters)
-                        {
-                            operation.Parameters.AppendParameter(parameter);
-                        }
-                    }
-                }
+                AppendSystemQueryOptions(function, operation);
             }
         }
 
         /// <inheritdoc/>
-        protected override void SetResponses(OpenApiOperation operation)
+        protected override void SetResponses(OpenApiOperation operation) 
         {
-            operation.Responses = Context.CreateResponses(EdmOperation, Path);
+            operation.Responses = Context.CreateResponses(EdmOperation);
             base.SetResponses(operation);
         }
 
         /// <inheritdoc/>
         protected override void SetSecurity(OpenApiOperation operation)
         {
-            OperationRestrictionsType restriction = Context.Model.GetRecord<OperationRestrictionsType>(EdmOperation, CapabilitiesConstants.OperationRestrictions);
-            if (restriction == null || restriction.Permissions == null)
+            if (_operationRestriction == null || _operationRestriction.Permissions == null)
             {
                 return;
             }
 
-            operation.Security = Context.CreateSecurityRequirements(restriction.Permissions).ToList();
+            operation.Security = Context.CreateSecurityRequirements(_operationRestriction.Permissions).ToList();
         }
 
         /// <inheritdoc/>
         protected override void AppendCustomParameters(OpenApiOperation operation)
         {
-            OperationRestrictionsType restriction = Context.Model.GetRecord<OperationRestrictionsType>(EdmOperation, CapabilitiesConstants.OperationRestrictions);
-            if (restriction == null)
+            if (_operationRestriction == null)
             {
                 return;
             }
 
-            if (restriction.CustomHeaders != null)
+            if (_operationRestriction.CustomHeaders != null)
             {
-                AppendCustomParameters(operation, restriction.CustomHeaders, ParameterLocation.Header);
+                AppendCustomParameters(operation, _operationRestriction.CustomHeaders, ParameterLocation.Header);
             }
 
-            if (restriction.CustomQueryOptions != null)
+            if (_operationRestriction.CustomQueryOptions != null)
             {
-                AppendCustomParameters(operation, restriction.CustomQueryOptions, ParameterLocation.Query);
+                AppendCustomParameters(operation, _operationRestriction.CustomQueryOptions, ParameterLocation.Query);
             }
+        }
+
+        private void AppendSystemQueryOptions(IEdmFunction function, OpenApiOperation operation)
+        {
+            if (function.ReturnType.IsCollection())
+            {
+                // $top
+                if (Context.CreateTop(function) is OpenApiParameter topParameter)
+                {
+                    operation.Parameters.AppendParameter(topParameter);
+                }
+
+                // $skip
+                if (Context.CreateSkip(function) is OpenApiParameter skipParameter)
+                {
+                    operation.Parameters.AppendParameter(skipParameter);
+                }
+
+                // $search
+                if (Context.CreateSearch(function) is OpenApiParameter searchParameter)
+                {
+                    operation.Parameters.AppendParameter(searchParameter);
+                }
+
+                // $filter
+                if (Context.CreateFilter(function) is OpenApiParameter filterParameter)
+                {
+                    operation.Parameters.AppendParameter(filterParameter);
+                }
+
+                // $count
+                if (Context.CreateCount(function) is OpenApiParameter countParameter)
+                {
+                    operation.Parameters.AppendParameter(countParameter);
+                }
+
+                if (function.ReturnType?.Definition?.AsElementType() is IEdmEntityType entityType)
+                {
+                    // $select
+                    if (Context.CreateSelect(function, entityType) is OpenApiParameter selectParameter)
+                    {
+                        operation.Parameters.AppendParameter(selectParameter);
+                    }
+
+                    // $orderby
+                    if (Context.CreateOrderBy(function, entityType) is OpenApiParameter orderbyParameter)
+                    {
+                        operation.Parameters.AppendParameter(orderbyParameter);
+                    }
+
+                    // $expand
+                    if (Context.CreateExpand(function, entityType) is OpenApiParameter expandParameter)
+                    {
+                        operation.Parameters.AppendParameter(expandParameter);
+                    }
+                }
+            }
+        }
+
+        /// <inheritdoc/>
+        protected override void SetCustomLinkRelType()
+        {
+            if (Context.Settings.CustomHttpMethodLinkRelMapping != null && EdmOperation != null)
+            {
+                LinkRelKey key = EdmOperation.IsAction() ? LinkRelKey.Action : LinkRelKey.Function;
+                Context.Settings.CustomHttpMethodLinkRelMapping.TryGetValue(key, out string linkRelValue);
+                CustomLinkRel =  linkRelValue;
+            }
+        }
+    
+        /// <inheritdoc/>
+        protected override void SetExternalDocs(OpenApiOperation operation)
+        {
+            if (Context.Settings.ShowExternalDocs)
+            {
+                var externalDocs = Context.Model.GetLinkRecord(TargetPath, CustomLinkRel) ??
+                    Context.Model.GetLinkRecord(EdmOperation, CustomLinkRel);
+
+                if (externalDocs != null)
+                {
+                    operation.ExternalDocs = new OpenApiExternalDocs()
+                    {
+                        Description = CoreConstants.ExternalDocsDescription,
+                        Url = externalDocs.Href
+                    };
+                }
+            }
+        }
+
+        // <inheritdoc/>
+        protected override void SetExtensions(OpenApiOperation operation)
+        {
+            if (Context.Settings.EnablePagination && EdmOperation.ReturnType?.TypeKind() == EdmTypeKind.Collection)
+            {
+                OpenApiObject extension = new OpenApiObject
+                {
+                    { "nextLinkName", new OpenApiString("@odata.nextLink")},
+                    { "operationName", new OpenApiString(Context.Settings.PageableOperationName)}
+                };
+
+                operation.Extensions.Add(Constants.xMsPageable, extension);
+            }
+            base.SetExtensions(operation);
         }
     }
 }

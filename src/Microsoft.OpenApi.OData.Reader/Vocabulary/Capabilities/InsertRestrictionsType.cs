@@ -79,6 +79,18 @@ namespace Microsoft.OpenApi.OData.Vocabulary.Capabilities
         public bool IsInsertable => Insertable == null || Insertable.Value == true;
 
         /// <summary>
+        /// Lists the media types acceptable for the request content
+        /// </summary>
+        /// <remarks>This is not an official OASIS standard property.</remarks>
+        public IList<string> RequestContentTypes { get; private set; }
+
+        /// <summary>
+        /// Lists the media types acceptable for the response content
+        /// </summary>
+        /// <remarks>This is not an official OASIS standard property.</remarks>
+        public IList<string> ResponseContentTypes { get; private set; }
+
+        /// <summary>
         /// Test the input navigation property do not allow deep insert.
         /// </summary>
         /// <param name="navigationPropertyPath">The input navigation property path.</param>
@@ -127,6 +139,46 @@ namespace Microsoft.OpenApi.OData.Vocabulary.Capabilities
 
             // LongDescription
             LongDescription = record.GetString("LongDescription");
+
+            // RequestContentTypes
+            RequestContentTypes = record.GetCollection("RequestContentTypes");
+
+            // ResponseContentTypes
+            ResponseContentTypes = record.GetCollection("ResponseContentTypes");
+        }
+
+        /// <summary>
+        /// Merges properties of the specified <see cref="InsertRestrictionsType"/> object into this instance if they are null.
+        /// </summary>
+        /// <param name="source">The <see cref="InsertRestrictionsType"/> object containing properties to merge.</param>
+        public void MergePropertiesIfNull(InsertRestrictionsType source)
+        {
+            if (source == null)
+                return;
+
+            Insertable ??= source.Insertable;
+
+            NonInsertableNavigationProperties ??= source.NonInsertableNavigationProperties;
+
+            MaxLevels ??= source.MaxLevels;
+
+            TypecastSegmentSupported ??= source.TypecastSegmentSupported;
+
+            Permissions ??= source.Permissions;
+
+            QueryOptions ??= source.QueryOptions;
+
+            CustomHeaders ??= source.CustomHeaders;
+
+            CustomQueryOptions ??= source.CustomQueryOptions;
+
+            Description ??= source.Description;
+
+            LongDescription ??= source.LongDescription;
+
+            RequestContentTypes ??= source.RequestContentTypes;
+
+            ResponseContentTypes ??= source.ResponseContentTypes;
         }
     }
 }

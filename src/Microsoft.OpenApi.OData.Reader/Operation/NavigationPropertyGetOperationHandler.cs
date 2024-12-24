@@ -9,6 +9,7 @@ using Microsoft.OData.Edm;
 using Microsoft.OpenApi.Any;
 using Microsoft.OpenApi.Models;
 using Microsoft.OpenApi.OData.Common;
+using Microsoft.OpenApi.OData.Edm;
 using Microsoft.OpenApi.OData.Generator;
 using Microsoft.OpenApi.OData.Vocabulary.Capabilities;
 
@@ -24,14 +25,22 @@ namespace Microsoft.OpenApi.OData.Operation
         /// <inheritdoc/>
         public override OperationType OperationType => OperationType.Get;
 
+        private ReadRestrictionsType _readRestriction;
+
+        /// <inheritdoc/>
+        protected override void Initialize(ODataContext context, ODataPath path)
+        {
+            base.Initialize(context, path);
+            _readRestriction = GetRestrictionAnnotation(CapabilitiesConstants.ReadRestrictions) as ReadRestrictionsType;
+        }
+
         /// <inheritdoc/>
         protected override void SetBasicInfo(OpenApiOperation operation)
         {
             // Summary and Description
-            ReadRestrictionsType readRestriction = Restriction?.ReadRestrictions;
             string placeHolder = "Get " + NavigationProperty.Name + " from " + NavigationSource.Name;
-            operation.Summary = (LastSegmentIsKeySegment ? readRestriction?.ReadByKeyRestrictions?.Description : readRestriction?.Description) ?? placeHolder;    
-            operation.Description = (LastSegmentIsKeySegment ? readRestriction?.ReadByKeyRestrictions?.LongDescription : readRestriction?.LongDescription)
+            operation.Summary = (LastSegmentIsKeySegment ? _readRestriction?.ReadByKeyRestrictions?.Description : _readRestriction?.Description) ?? placeHolder;    
+            operation.Description = (LastSegmentIsKeySegment ? _readRestriction?.ReadByKeyRestrictions?.LongDescription : _readRestriction?.LongDescription)
                 ?? Context.Model.GetDescriptionAnnotation(NavigationProperty);
 
             // OperationId
@@ -86,7 +95,7 @@ namespace Microsoft.OpenApi.OData.Operation
                 operation.Responses = new OpenApiResponses
                 {
                     {
-                        Constants.StatusCode200,
+                        Context.Settings.UseSuccessStatusCodeRange ? Constants.StatusCodeClass2XX : Constants.StatusCode200,
                         new OpenApiResponse
                         {
                             UnresolvedReference = true,
@@ -126,7 +135,7 @@ namespace Microsoft.OpenApi.OData.Operation
                 operation.Responses = new OpenApiResponses
                 {
                     {
-                        Constants.StatusCode200,
+                        Context.Settings.UseSuccessStatusCodeRange ? Constants.StatusCodeClass2XX : Constants.StatusCode200,
                         new OpenApiResponse
                         {
                             Description = "Retrieved navigation property",
@@ -156,88 +165,87 @@ namespace Microsoft.OpenApi.OData.Operation
         {
             base.SetParameters(operation);
 
+            OpenApiParameter selectParameter = Context.CreateSelect(TargetPath, NavigationProperty.ToEntityType()) 
+                ?? Context.CreateSelect(NavigationProperty);
+
+            OpenApiParameter expandParameter = Context.CreateExpand(TargetPath, NavigationProperty.ToEntityType()) 
+                ?? Context.CreateExpand(NavigationProperty);
+
             if (!LastSegmentIsKeySegment && NavigationProperty.TargetMultiplicity() == EdmMultiplicity.Many)
             {
                 // Need to verify that TopSupported or others should be applied to navigation source.
                 // So, how about for the navigation property.
-                OpenApiParameter parameter = Context.CreateTop(NavigationProperty);
+                OpenApiParameter parameter = Context.CreateTop(TargetPath) ?? Context.CreateTop(NavigationProperty);
                 if (parameter != null)
                 {
                     operation.Parameters.Add(parameter);
                 }
 
-                parameter = Context.CreateSkip(NavigationProperty);
+                parameter = Context.CreateSkip(TargetPath) ?? Context.CreateSkip(NavigationProperty);
                 if (parameter != null)
                 {
                     operation.Parameters.Add(parameter);
                 }
 
-                parameter = Context.CreateSearch(NavigationProperty);
+                parameter = Context.CreateSearch(TargetPath) ?? Context.CreateSearch(NavigationProperty);
                 if (parameter != null)
                 {
                     operation.Parameters.Add(parameter);
                 }
 
-                parameter = Context.CreateFilter(NavigationProperty);
+                parameter = Context.CreateFilter(TargetPath) ?? Context.CreateFilter(NavigationProperty);
                 if (parameter != null)
                 {
                     operation.Parameters.Add(parameter);
                 }
 
-                parameter = Context.CreateCount(NavigationProperty);
+                parameter = Context.CreateCount(TargetPath) ?? Context.CreateCount(NavigationProperty);
                 if (parameter != null)
                 {
                     operation.Parameters.Add(parameter);
                 }
 
-                parameter = Context.CreateOrderBy(NavigationProperty);
+                parameter = Context.CreateOrderBy(TargetPath, NavigationProperty.ToEntityType()) ?? Context.CreateOrderBy(NavigationProperty);
                 if (parameter != null)
                 {
                     operation.Parameters.Add(parameter);
                 }
 
-                parameter = Context.CreateSelect(NavigationProperty);
-                if (parameter != null)
+                if (selectParameter != null)
                 {
-                    operation.Parameters.Add(parameter);
+                    operation.Parameters.Add(selectParameter);
                 }
 
-                parameter = Context.CreateExpand(NavigationProperty);
-                if (parameter != null)
+                if (expandParameter != null)
                 {
-                    operation.Parameters.Add(parameter);
+                    operation.Parameters.Add(expandParameter);
                 }
             }
             else
             {
-                OpenApiParameter parameter = Context.CreateSelect(NavigationProperty);
-                if (parameter != null)
+                if (selectParameter != null)
                 {
-                    operation.Parameters.Add(parameter);
+                    operation.Parameters.Add(selectParameter);
                 }
 
-                parameter = Context.CreateExpand(NavigationProperty);
-                if (parameter != null)
+                if (expandParameter != null)
                 {
-                    operation.Parameters.Add(parameter);
+                    operation.Parameters.Add(expandParameter);
                 }
             }
         }
 
         protected override void SetSecurity(OpenApiOperation operation)
         {
-            if (Restriction == null || Restriction.ReadRestrictions == null)
+            if (_readRestriction == null)
             {
                 return;
             }
 
-            ReadRestrictionsBase readBase = Restriction.ReadRestrictions;
-            if (LastSegmentIsKeySegment)
+            ReadRestrictionsBase readBase = _readRestriction;
+            if (LastSegmentIsKeySegment && _readRestriction.ReadByKeyRestrictions != null)
             {
-                if (Restriction.ReadRestrictions.ReadByKeyRestrictions != null)
-                {
-                    readBase = Restriction.ReadRestrictions.ReadByKeyRestrictions;
-                }
+                readBase = _readRestriction.ReadByKeyRestrictions;
             }
 
             operation.Security = Context.CreateSecurityRequirements(readBase.Permissions).ToList();
@@ -245,18 +253,15 @@ namespace Microsoft.OpenApi.OData.Operation
 
         protected override void AppendCustomParameters(OpenApiOperation operation)
         {
-            if (Restriction == null || Restriction.ReadRestrictions == null)
+            if (_readRestriction == null)
             {
                 return;
             }
 
-            ReadRestrictionsBase readBase = Restriction.ReadRestrictions;
-            if (LastSegmentIsKeySegment)
+            ReadRestrictionsBase readBase = _readRestriction;
+            if (LastSegmentIsKeySegment && _readRestriction.ReadByKeyRestrictions != null)
             {
-                if (Restriction.ReadRestrictions.ReadByKeyRestrictions != null)
-                {
-                    readBase = Restriction.ReadRestrictions.ReadByKeyRestrictions;
-                }
+                readBase = _readRestriction.ReadByKeyRestrictions;
             }
 
             if (readBase.CustomHeaders != null)

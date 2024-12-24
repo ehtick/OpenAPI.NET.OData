@@ -40,6 +40,7 @@ namespace Microsoft.OpenApi.OData.Tests
             IEdmModel model = EdmModelHelper.EmptyModel;
             var openApiConvertSettings = new OpenApiConvertSettings();
             openApiConvertSettings.OpenApiSpecVersion = specVersion;
+            openApiConvertSettings.IncludeAssemblyInfo = false;
 
             // Act
             string json = WriteEdmModelAsOpenApi(model, OpenApiFormat.Json, openApiConvertSettings);
@@ -64,7 +65,8 @@ namespace Microsoft.OpenApi.OData.Tests
             // Arrange
             IEdmModel model = EdmModelHelper.EmptyModel;
             var openApiConvertSettings = new OpenApiConvertSettings();
-            openApiConvertSettings.OpenApiSpecVersion = specVersion;
+            openApiConvertSettings.OpenApiSpecVersion = specVersion; 
+            openApiConvertSettings.IncludeAssemblyInfo = false;
 
             // Act
             string yaml = WriteEdmModelAsOpenApi(model, OpenApiFormat.Yaml, openApiConvertSettings);
@@ -91,7 +93,9 @@ namespace Microsoft.OpenApi.OData.Tests
             var openApiConvertSettings = new OpenApiConvertSettings
             {
                 OpenApiSpecVersion = specVersion,
-                ShowSchemaExamples = true // test for schema examples
+                ShowSchemaExamples = true, // test for schema examples
+                IncludeAssemblyInfo = false,
+                UseStringArrayForQueryOptionsSchema = false
             };
 
             // Act
@@ -119,7 +123,9 @@ namespace Microsoft.OpenApi.OData.Tests
             var openApiConvertSettings = new OpenApiConvertSettings
             {
                 OpenApiSpecVersion = specVersion,
-                ShowSchemaExamples = true
+                ShowSchemaExamples = true,
+                IncludeAssemblyInfo = false,
+                UseStringArrayForQueryOptionsSchema = false
             };
 
             // Act
@@ -148,7 +154,9 @@ namespace Microsoft.OpenApi.OData.Tests
             {
                 OpenApiSpecVersion = specVersion,
                 ShowLinks = true, // test Links
-                ShowSchemaExamples = true
+                ShowSchemaExamples = true,
+                IncludeAssemblyInfo = false,
+                UseStringArrayForQueryOptionsSchema = false
             };
 
             // Act
@@ -177,7 +185,9 @@ namespace Microsoft.OpenApi.OData.Tests
             {
                 OpenApiSpecVersion = specVersion,
                 ShowLinks = true, // test Links
-                ShowSchemaExamples = true
+                ShowSchemaExamples = true,
+                IncludeAssemblyInfo = false,
+                UseStringArrayForQueryOptionsSchema = false
             };
 
             // Act
@@ -205,12 +215,14 @@ namespace Microsoft.OpenApi.OData.Tests
             OpenApiConvertSettings settings = new OpenApiConvertSettings
             {
                 EnableKeyAsSegment = true,
-                Version = new Version(1, 0, 1),
+                SemVerVersion = "1.0.1",
                 ServiceRoot = new Uri("http://services.odata.org/TrippinRESTierService"),
                 IEEE754Compatible = true,
                 OpenApiSpecVersion = specVersion,
                 AddSingleQuotesForStringParameters = true,
                 AddEnumDescriptionExtension = true,
+                AppendBoundOperationsOnDerivedTypeCastSegments = true,
+                IncludeAssemblyInfo = false
             };
             // Act
             string json = WriteEdmModelAsOpenApi(model, OpenApiFormat.Json, settings);
@@ -238,12 +250,14 @@ namespace Microsoft.OpenApi.OData.Tests
             OpenApiConvertSettings settings = new OpenApiConvertSettings
             {
                 EnableKeyAsSegment = true,
-                Version = new Version(1, 0, 1),
+                SemVerVersion = "1.2.3",
                 ServiceRoot = new Uri("http://services.odata.org/TrippinRESTierService"),
                 IEEE754Compatible = true,
                 OpenApiSpecVersion = specVersion,
                 AddSingleQuotesForStringParameters = true,
                 AddEnumDescriptionExtension = true,
+                AppendBoundOperationsOnDerivedTypeCastSegments = true,
+                IncludeAssemblyInfo = false
             };
 
             // Act

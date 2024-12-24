@@ -6,11 +6,13 @@
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.OpenApi.Any;
+using Microsoft.OpenApi.MicrosoftExtensions;
 using Microsoft.OpenApi.Models;
 using Microsoft.OpenApi.OData.Common;
 using Microsoft.OpenApi.OData.Edm;
 using Microsoft.OpenApi.OData.Generator;
 using Microsoft.OpenApi.OData.Vocabulary.Capabilities;
+using Microsoft.OpenApi.OData.Vocabulary.Core;
 
 namespace Microsoft.OpenApi.OData.Operation
 {
@@ -30,6 +32,11 @@ namespace Microsoft.OpenApi.OData.Operation
         /// </summary>
         protected IList<OpenApiParameter> PathParameters;
 
+        /// <summary>
+        /// The string representation of the Edm target path for annotations.
+        /// </summary>
+        protected string TargetPath;
+
         /// <inheritdoc/>
         public virtual OpenApiOperation CreateOperation(ODataContext context, ODataPath path)
         {
@@ -46,6 +53,9 @@ namespace Microsoft.OpenApi.OData.Operation
             // Description / Summary / OperationId
             SetBasicInfo(operation);
             SetDeprecation(operation);
+
+            // ExternalDocs
+            SetExternalDocs(operation);
 
             // Security
             SetSecurity(operation);
@@ -68,12 +78,13 @@ namespace Microsoft.OpenApi.OData.Operation
             // Extensions
             SetExtensions(operation);
 
+
             return operation;
         }
 
         private void SetDeprecation(OpenApiOperation operation)
         {
-            if(operation != null && Context.Settings.EnableDeprecationInformation)
+            if (operation != null && Context.Settings.EnableDeprecationInformation)
             {
                 var deprecationInfo = Path.SelectMany(x => x.GetAnnotables())
                                     .SelectMany(x => Context.GetDeprecationInformations(x))
@@ -82,11 +93,11 @@ namespace Microsoft.OpenApi.OData.Operation
                                     .ThenByDescending(x => x.RemovalDate)
                                     .FirstOrDefault();
 
-                if(deprecationInfo != null)
+                if (deprecationInfo != null)
                 {
                     operation.Deprecated = true;
                     var deprecationDetails = deprecationInfo.GetOpenApiExtension();
-                    operation.Extensions.Add(deprecationDetails.Name, deprecationDetails);
+                    operation.Extensions.Add(OpenApiDeprecationExtension.Name, deprecationDetails);
                 }
             }
         }
@@ -102,13 +113,21 @@ namespace Microsoft.OpenApi.OData.Operation
         protected ODataPath Path { get; private set; }
 
         /// <summary>
+        /// Gets the custom link relation type for path based on operation type
+        /// </summary>
+        protected string CustomLinkRel { get; set; }
+
+        /// <summary>
         /// Initialize the handler.
         /// It should be call ahead of in derived class.
         /// </summary>
         /// <param name="context">The context.</param>
         /// <param name="path">The path.</param>
         protected virtual void Initialize(ODataContext context, ODataPath path)
-        { }
+        {
+            SetCustomLinkRelType();
+            TargetPath = path.GetTargetPath(context.Model);
+        }
 
         /// <summary>
         /// Set the basic information for <see cref="OpenApiOperation"/>.
@@ -178,20 +197,25 @@ namespace Microsoft.OpenApi.OData.Operation
         { }
 
         /// <summary>
+        /// Set the ExternalDocs information for <see cref="OpenApiOperation"/>.
+        /// </summary>
+        /// <param name="operation">The <see cref="OpenApiOperation"/>.</param>
+        protected virtual void SetExternalDocs(OpenApiOperation operation)
+        { }
+
+        /// <summary>
         /// Set the customized parameters for the operation.
         /// </summary>
         /// <param name="operation">The operation.</param>
         protected virtual void AppendCustomParameters(OpenApiOperation operation)
-        {
-        }
+        { }
 
         /// <summary>
         /// Set the addition annotation for the response.
         /// </summary>
         /// <param name="operation">The operation.</param>
         protected virtual void AppendHttpResponses(OpenApiOperation operation)
-        {
-        }
+        { }
 
         /// <summary>
         /// Sets the custom parameters.
@@ -245,6 +269,80 @@ namespace Microsoft.OpenApi.OData.Operation
 
                 operation.Parameters.AppendParameter(parameter);
             }
+        }
+
+        /// <summary>
+        /// Set link relation type to be used to get external docs link for path operation
+        /// </summary>
+        protected virtual void SetCustomLinkRelType()
+        {
+            if (Context.Settings.CustomHttpMethodLinkRelMapping != null)
+            {
+                LinkRelKey? key = OperationType switch
+                {
+                    OperationType.Get => Path.LastSegment?.Kind ==  ODataSegmentKind.Key ? LinkRelKey.ReadByKey : LinkRelKey.List,
+                    OperationType.Post => LinkRelKey.Create,
+                    OperationType.Patch => LinkRelKey.Update,
+                    OperationType.Put => LinkRelKey.Update,
+                    OperationType.Delete => LinkRelKey.Delete,
+                    _ => null,
+                };
+
+                if (key != null)
+                {
+                    Context.Settings.CustomHttpMethodLinkRelMapping.TryGetValue((LinkRelKey)key, out string linkRelValue);
+                    CustomLinkRel = linkRelValue;
+                }
+            }
+        }
+
+        internal void SetCollectionResponse(OpenApiOperation operation, string targetElementFullName)
+        {
+            Utils.CheckArgumentNull(operation, nameof(operation));
+            Utils.CheckArgumentNullOrEmpty(targetElementFullName, nameof(targetElementFullName));            
+
+            operation.Responses = new OpenApiResponses
+            {
+                {
+                    Context.Settings.UseSuccessStatusCodeRange ? Constants.StatusCodeClass2XX : Constants.StatusCode200,
+                    new OpenApiResponse
+                    {
+                        UnresolvedReference = true,
+                        Reference = new OpenApiReference()
+                        {
+                            Type = ReferenceType.Response,
+                            Id = $"{targetElementFullName}{Constants.CollectionSchemaSuffix}"
+                        }
+                    }
+                }
+            };
+        }
+
+        internal void SetSingleResponse(OpenApiOperation operation, OpenApiSchema schema)
+        {
+            Utils.CheckArgumentNull(operation, nameof(operation));
+            Utils.CheckArgumentNull(schema, nameof(schema));
+            
+            operation.Responses = new OpenApiResponses
+            {
+                {
+                    Context.Settings.UseSuccessStatusCodeRange ? Constants.StatusCodeClass2XX : Constants.StatusCode200,
+                    new OpenApiResponse
+                    {
+                        Description = "Entity result.",
+                        Content = new Dictionary<string, OpenApiMediaType>
+                        {
+                            {
+                                Constants.ApplicationJsonMediaType,
+                                new OpenApiMediaType
+                                {
+                                    Schema = schema
+                                }
+                            }
+                        },
+                    }
+                }
+            };
         }
     }
 }

@@ -1,4 +1,4 @@
-﻿// ------------------------------------------------------------
+// ------------------------------------------------------------
 //  Copyright (c) Microsoft Corporation.  All rights reserved.
 //  Licensed under the MIT License (MIT). See LICENSE in the repo root for license information.
 // ------------------------------------------------------------
@@ -35,28 +35,115 @@ namespace Microsoft.OpenApi.OData.Tests
             Assert.Throws<ArgumentNullException>("context", () => context.CreateSchemas());
         }
 
-        [Fact]
-        public void CreatesCollectionResponseSchema()
+        [Theory]
+        [InlineData(true, false, "BaseCollectionPaginationCountResponse")]
+        [InlineData(false, true, "BaseCollectionPaginationCountResponse")]
+        [InlineData(true, true, "BaseCollectionPaginationCountResponse")]
+        [InlineData(false, false)]
+        public void CreatesCollectionResponseSchema(bool enablePagination, bool enableCount, string referenceId = null)
         {
             // Arrange
             IEdmModel model = EdmModelHelper.TripServiceModel;
             OpenApiConvertSettings settings = new()
             {
-                    EnableOperationId = true,
-                    EnablePagination = true,
+                EnableOperationId = true,
+                EnablePagination = enablePagination,
+                EnableCount = enableCount
             };
             ODataContext context = new(model, settings);
 
             // Act & Assert
             var schemas = context.CreateSchemas();
 
-            var flightCollectionResponse = schemas["Microsoft.OData.Service.Sample.TrippinInMemory.Models.FlightCollectionResponse"];
             var stringCollectionResponse = schemas["StringCollectionResponse"];
+            var flightCollectionResponse = schemas["Microsoft.OData.Service.Sample.TrippinInMemory.Models.FlightCollectionResponse"];
 
-            Assert.Equal("array", flightCollectionResponse.Properties["value"].Type);
-            Assert.Equal("Microsoft.OData.Service.Sample.TrippinInMemory.Models.Flight", flightCollectionResponse.Properties["value"].Items.Reference.Id);
-            Assert.Equal("array", stringCollectionResponse.Properties["value"].Type);
-            Assert.Equal("string", stringCollectionResponse.Properties["value"].Items.Type);
+            if (enablePagination || enableCount)
+            {
+                Assert.Collection(stringCollectionResponse.AllOf,
+                item =>
+                {
+                    Assert.Equal(referenceId, item.Reference.Id);
+                },
+                item =>
+                {
+                    Assert.Equal("array", item.Properties["value"].Type);
+                });
+
+                Assert.Equal("array", flightCollectionResponse.AllOf?.FirstOrDefault(x => x.Properties.Any())?.Properties["value"].Type);
+                Assert.Equal("Microsoft.OData.Service.Sample.TrippinInMemory.Models.Flight",
+                    flightCollectionResponse.AllOf?.FirstOrDefault(x => x.Properties.Any())?.Properties["value"].Items.Reference.Id);
+            }
+            else
+            {
+                Assert.Equal("array", stringCollectionResponse.Properties["value"].Type);
+                Assert.Equal("array", flightCollectionResponse.Properties["value"].Type);
+                Assert.Equal("Microsoft.OData.Service.Sample.TrippinInMemory.Models.Flight", flightCollectionResponse.Properties["value"].Items.Reference.Id);
+            }
+        }
+
+        [Fact]
+        public void CreatesRefRequestBodySchema()
+        {
+            // Arrange
+            IEdmModel model = EdmModelHelper.TripServiceModel;
+            OpenApiConvertSettings settings = new()
+            {
+                EnableOperationId = true,
+                EnablePagination = true,
+            };
+            ODataContext context = new(model, settings);
+
+            // Act & Assert
+            var schemas = context.CreateSchemas();
+
+            schemas.TryGetValue(Constants.ReferenceCreateSchemaName, out OpenApiSchema refRequestBody);
+
+            Assert.NotNull(refRequestBody);
+            Assert.Equal("object", refRequestBody.Type);
+            Assert.Equal(Constants.OdataId, refRequestBody.Properties.First().Key);
+            Assert.Equal("string", refRequestBody.Properties.First().Value.Type);
+            Assert.Equal("object", refRequestBody.AdditionalProperties.Type);
+        }
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void CreatesRefOdataAnnotationResponseSchemas(bool enableOdataAnnotationRef)
+        {
+            // Arrange
+            IEdmModel model = EdmModelHelper.GraphBetaModel;
+            OpenApiConvertSettings settings = new()
+            {
+                EnableOperationId = true,
+                EnablePagination = true,
+                EnableCount = true,
+                EnableODataAnnotationReferencesForResponses = enableOdataAnnotationRef
+            };
+            ODataContext context = new(model, settings);
+
+            // Act
+            var schemas = context.CreateSchemas();
+
+            // Assert
+            Assert.NotNull(schemas);
+            Assert.NotEmpty(schemas);
+            schemas.TryGetValue(Constants.BaseCollectionPaginationCountResponse, out OpenApiSchema refPaginationCount);
+            schemas.TryGetValue(Constants.BaseDeltaFunctionResponse, out OpenApiSchema refDeltaFunc);
+            if (enableOdataAnnotationRef)
+            {
+                Assert.NotNull(refPaginationCount);
+                Assert.NotNull(refDeltaFunc);
+                Assert.True(refPaginationCount.Properties.ContainsKey("@odata.nextLink"));
+                Assert.True(refPaginationCount.Properties.ContainsKey("@odata.count"));
+                Assert.True(refDeltaFunc.Properties.ContainsKey("@odata.nextLink"));
+                Assert.True(refDeltaFunc.Properties.ContainsKey("@odata.deltaLink"));
+            }
+            else
+            {
+                Assert.Null(refPaginationCount);
+                Assert.Null(refDeltaFunc);
+            }
         }
 
         #region StructuredTypeSchema
@@ -81,7 +168,7 @@ namespace Microsoft.OpenApi.OData.Tests
         }
 
         [Fact]
-        public void CreateStructuredTypeSchemaWithDiscriminatorValueEnabledReturnsCorrectSchema()
+        public void CreateStructuredTypeSchemaForEntityTypeWithDiscriminatorValueEnabledReturnsCorrectSchema()
         {
             // Arrange
             IEdmModel model = EdmModelHelper.GraphBetaModel;
@@ -90,11 +177,183 @@ namespace Microsoft.OpenApi.OData.Tests
                 EnableDiscriminatorValue = true,
             });
 
+            string derivedType = "user";
             IEdmEntityType entity = model.SchemaElements.OfType<IEdmEntityType>().First(t => t.Name == "directoryObject");
-            Assert.NotNull(entity); // Guard
+            IEdmEntityType derivedEntity = model.SchemaElements.OfType<IEdmEntityType>().First(t => t.Name == derivedType);
+            Assert.NotNull(entity);
+            Assert.NotNull(derivedEntity);
 
             // Act
             var schema = context.CreateStructuredTypeSchema(entity);
+            var derivedSchema = context.CreateStructuredTypeSchema(derivedEntity);
+            string json = schema.SerializeAsJson(OpenApiSpecVersion.OpenApi3_0);
+
+            // Assert
+            Assert.True(derivedSchema.AllOf.FirstOrDefault(x => derivedType.Equals(x.Title))?.Properties.ContainsKey("@odata.type"));
+            Assert.NotNull(json);
+            Assert.Equal(@"{
+  ""allOf"": [
+    {
+      ""$ref"": ""#/components/schemas/microsoft.graph.entity""
+    },
+    {
+      ""title"": ""directoryObject"",
+      ""required"": [
+        ""@odata.type""
+      ],
+      ""type"": ""object"",
+      ""properties"": {
+        ""deletedDateTime"": {
+          ""pattern"": ""^[0-9]{4,}-(0[1-9]|1[012])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]([.][0-9]{1,12})?(Z|[+-][0-9][0-9]:[0-9][0-9])$"",
+          ""type"": ""string"",
+          ""description"": ""Date and time when this object was deleted. Always null when the object hasn't been deleted."",
+          ""format"": ""date-time"",
+          ""nullable"": true
+        },
+        ""@odata.type"": {
+          ""type"": ""string"",
+          ""default"": ""#microsoft.graph.directoryObject""
+        }
+      },
+      ""discriminator"": {
+        ""propertyName"": ""@odata.type"",
+        ""mapping"": {
+          ""#microsoft.graph.user"": ""#/components/schemas/microsoft.graph.user"",
+          ""#microsoft.graph.servicePrincipal"": ""#/components/schemas/microsoft.graph.servicePrincipal"",
+          ""#microsoft.graph.group"": ""#/components/schemas/microsoft.graph.group"",
+          ""#microsoft.graph.device"": ""#/components/schemas/microsoft.graph.device"",
+          ""#microsoft.graph.administrativeUnit"": ""#/components/schemas/microsoft.graph.administrativeUnit"",
+          ""#microsoft.graph.application"": ""#/components/schemas/microsoft.graph.application"",
+          ""#microsoft.graph.policyBase"": ""#/components/schemas/microsoft.graph.policyBase"",
+          ""#microsoft.graph.appManagementPolicy"": ""#/components/schemas/microsoft.graph.appManagementPolicy"",
+          ""#microsoft.graph.stsPolicy"": ""#/components/schemas/microsoft.graph.stsPolicy"",
+          ""#microsoft.graph.homeRealmDiscoveryPolicy"": ""#/components/schemas/microsoft.graph.homeRealmDiscoveryPolicy"",
+          ""#microsoft.graph.tokenIssuancePolicy"": ""#/components/schemas/microsoft.graph.tokenIssuancePolicy"",
+          ""#microsoft.graph.tokenLifetimePolicy"": ""#/components/schemas/microsoft.graph.tokenLifetimePolicy"",
+          ""#microsoft.graph.claimsMappingPolicy"": ""#/components/schemas/microsoft.graph.claimsMappingPolicy"",
+          ""#microsoft.graph.activityBasedTimeoutPolicy"": ""#/components/schemas/microsoft.graph.activityBasedTimeoutPolicy"",
+          ""#microsoft.graph.authorizationPolicy"": ""#/components/schemas/microsoft.graph.authorizationPolicy"",
+          ""#microsoft.graph.tenantRelationshipAccessPolicyBase"": ""#/components/schemas/microsoft.graph.tenantRelationshipAccessPolicyBase"",
+          ""#microsoft.graph.crossTenantAccessPolicy"": ""#/components/schemas/microsoft.graph.crossTenantAccessPolicy"",
+          ""#microsoft.graph.tenantAppManagementPolicy"": ""#/components/schemas/microsoft.graph.tenantAppManagementPolicy"",
+          ""#microsoft.graph.externalIdentitiesPolicy"": ""#/components/schemas/microsoft.graph.externalIdentitiesPolicy"",
+          ""#microsoft.graph.permissionGrantPolicy"": ""#/components/schemas/microsoft.graph.permissionGrantPolicy"",
+          ""#microsoft.graph.servicePrincipalCreationPolicy"": ""#/components/schemas/microsoft.graph.servicePrincipalCreationPolicy"",
+          ""#microsoft.graph.identitySecurityDefaultsEnforcementPolicy"": ""#/components/schemas/microsoft.graph.identitySecurityDefaultsEnforcementPolicy"",
+          ""#microsoft.graph.extensionProperty"": ""#/components/schemas/microsoft.graph.extensionProperty"",
+          ""#microsoft.graph.endpoint"": ""#/components/schemas/microsoft.graph.endpoint"",
+          ""#microsoft.graph.resourceSpecificPermissionGrant"": ""#/components/schemas/microsoft.graph.resourceSpecificPermissionGrant"",
+          ""#microsoft.graph.contract"": ""#/components/schemas/microsoft.graph.contract"",
+          ""#microsoft.graph.directoryObjectPartnerReference"": ""#/components/schemas/microsoft.graph.directoryObjectPartnerReference"",
+          ""#microsoft.graph.directoryRole"": ""#/components/schemas/microsoft.graph.directoryRole"",
+          ""#microsoft.graph.directoryRoleTemplate"": ""#/components/schemas/microsoft.graph.directoryRoleTemplate"",
+          ""#microsoft.graph.directorySettingTemplate"": ""#/components/schemas/microsoft.graph.directorySettingTemplate"",
+          ""#microsoft.graph.organization"": ""#/components/schemas/microsoft.graph.organization"",
+          ""#microsoft.graph.orgContact"": ""#/components/schemas/microsoft.graph.orgContact""
+        }
+      }
+    }
+  ]
+}".ChangeLineBreaks(), json);
+        }
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void CreateStructuredTypeSchemaForComplexTypeWithDiscriminatorValueEnabledReturnsCorrectSchema(bool enableTypeDisambiguationForOdataTypePropertyDefaultValue)
+        {
+            // Arrange
+            IEdmModel model = EdmModelHelper.GraphBetaModel;
+            ODataContext context = new(model, new OpenApiConvertSettings
+            {
+                EnableDiscriminatorValue = true,
+                EnableTypeDisambiguationForDefaultValueOfOdataTypeProperty = enableTypeDisambiguationForOdataTypePropertyDefaultValue
+            });
+
+            IEdmComplexType complex = model.SchemaElements.OfType<IEdmComplexType>().First(t => t.Name == "userSet");
+            Assert.NotNull(complex); // Guard
+
+            // Act
+            var schema = context.CreateStructuredTypeSchema(complex);
+            string json = schema.SerializeAsJson(OpenApiSpecVersion.OpenApi3_0);
+
+            // Assert
+            Assert.NotNull(json);
+            string expected = enableTypeDisambiguationForOdataTypePropertyDefaultValue ?
+                @"{
+  ""title"": ""userSet"",
+  ""required"": [
+    ""@odata.type""
+  ],
+  ""type"": ""object"",
+  ""properties"": {
+    ""isBackup"": {
+      ""type"": ""boolean"",
+      ""description"": ""For a user in an approval stage, this property indicates whether the user is a backup fallback approver."",
+      ""nullable"": true
+    },
+    ""@odata.type"": {
+      ""type"": ""string""
+    }
+  },
+  ""discriminator"": {
+    ""propertyName"": ""@odata.type"",
+    ""mapping"": {
+      ""#microsoft.graph.connectedOrganizationMembers"": ""#/components/schemas/microsoft.graph.connectedOrganizationMembers"",
+      ""#microsoft.graph.externalSponsors"": ""#/components/schemas/microsoft.graph.externalSponsors"",
+      ""#microsoft.graph.groupMembers"": ""#/components/schemas/microsoft.graph.groupMembers"",
+      ""#microsoft.graph.internalSponsors"": ""#/components/schemas/microsoft.graph.internalSponsors"",
+      ""#microsoft.graph.requestorManager"": ""#/components/schemas/microsoft.graph.requestorManager"",
+      ""#microsoft.graph.singleUser"": ""#/components/schemas/microsoft.graph.singleUser""
+    }
+  }
+}".ChangeLineBreaks()
+:
+                @"{
+  ""title"": ""userSet"",
+  ""required"": [
+    ""@odata.type""
+  ],
+  ""type"": ""object"",
+  ""properties"": {
+    ""isBackup"": {
+      ""type"": ""boolean"",
+      ""description"": ""For a user in an approval stage, this property indicates whether the user is a backup fallback approver."",
+      ""nullable"": true
+    },
+    ""@odata.type"": {
+      ""type"": ""string"",
+      ""default"": ""#microsoft.graph.userSet""
+    }
+  },
+  ""discriminator"": {
+    ""propertyName"": ""@odata.type"",
+    ""mapping"": {
+      ""#microsoft.graph.connectedOrganizationMembers"": ""#/components/schemas/microsoft.graph.connectedOrganizationMembers"",
+      ""#microsoft.graph.externalSponsors"": ""#/components/schemas/microsoft.graph.externalSponsors"",
+      ""#microsoft.graph.groupMembers"": ""#/components/schemas/microsoft.graph.groupMembers"",
+      ""#microsoft.graph.internalSponsors"": ""#/components/schemas/microsoft.graph.internalSponsors"",
+      ""#microsoft.graph.requestorManager"": ""#/components/schemas/microsoft.graph.requestorManager"",
+      ""#microsoft.graph.singleUser"": ""#/components/schemas/microsoft.graph.singleUser""
+    }
+  }
+}".ChangeLineBreaks();
+
+            Assert.Equal(expected, json);
+        }
+
+        [Fact]
+        public void CreateStructuredTypePropertiesSchemaWithCustomAttributeReturnsCorrectSchema()
+        {
+            // Arrange
+            IEdmModel model = EdmModelHelper.GraphBetaModel;
+            ODataContext context = new(model);
+            context.Settings.CustomXMLAttributesMapping.Add("IsHidden", "x-ms-isHidden");
+            IEdmEntityType entity = model.SchemaElements.OfType<IEdmEntityType>().First(t => t.Name == "userSettings");
+            Assert.NotNull(entity); // Guard
+
+            // Act
+            OpenApiSchema schema = context.CreateStructuredTypeSchema(entity);
             string json = schema.SerializeAsJson(OpenApiSpecVersion.OpenApi3_0);
 
             // Assert
@@ -105,20 +364,68 @@ namespace Microsoft.OpenApi.OData.Tests
       ""$ref"": ""#/components/schemas/microsoft.graph.entity""
     },
     {
-      ""title"": ""directoryObject"",
+      ""title"": ""userSettings"",
       ""type"": ""object"",
       ""properties"": {
-        ""deletedDateTime"": {
-          ""pattern"": ""^[0-9]{4,}-(0[1-9]|1[012])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]([.][0-9]{1,12})?(Z|[+-][0-9][0-9]:[0-9][0-9])$"",
-          ""type"": ""string"",
-          ""format"": ""date-time"",
-          ""nullable"": true
-        }
-      },
-      ""discriminator"": {
-        ""propertyName"": ""@odata.type"",
-        ""mapping"": {
-          ""#microsoft.graph.directoryObject"": ""#/components/schemas/microsoft.graph.directoryObject""
+        ""contributionToContentDiscoveryAsOrganizationDisabled"": {
+          ""type"": ""boolean"",
+          ""description"": ""Reflects the Office Delve organization level setting. When set to true, the organization doesn't have access to Office Delve. This setting is read-only and can only be changed by administrators in the SharePoint admin center.""
+        },
+        ""contributionToContentDiscoveryDisabled"": {
+          ""type"": ""boolean"",
+          ""description"": ""When set to true, documents in the user's Office Delve are disabled. Users can control this setting in Office Delve.""
+        },
+        ""itemInsights"": {
+          ""anyOf"": [
+            {
+              ""$ref"": ""#/components/schemas/microsoft.graph.userInsightsSettings""
+            },
+            {
+              ""type"": ""object"",
+              ""nullable"": true
+            }
+          ],
+          ""description"": ""The user's settings for the visibility of meeting hour insights, and insights derived between a user and other items in Microsoft 365, such as documents or sites. Get userInsightsSettings through this navigation property."",
+          ""x-ms-navigationProperty"": true
+        },
+        ""contactMergeSuggestions"": {
+          ""anyOf"": [
+            {
+              ""$ref"": ""#/components/schemas/microsoft.graph.contactMergeSuggestions""
+            },
+            {
+              ""type"": ""object"",
+              ""nullable"": true
+            }
+          ],
+          ""description"": ""The user's settings for the visibility of merge suggestion for the duplicate contacts in the user's contact list."",
+          ""x-ms-navigationProperty"": true
+        },
+        ""regionalAndLanguageSettings"": {
+          ""anyOf"": [
+            {
+              ""$ref"": ""#/components/schemas/microsoft.graph.regionalAndLanguageSettings""
+            },
+            {
+              ""type"": ""object"",
+              ""nullable"": true
+            }
+          ],
+          ""description"": ""The user's preferences for languages, regional locale and date/time formatting."",
+          ""x-ms-navigationProperty"": true
+        },
+        ""shiftPreferences"": {
+          ""anyOf"": [
+            {
+              ""$ref"": ""#/components/schemas/microsoft.graph.shiftPreferences""
+            },
+            {
+              ""type"": ""object"",
+              ""nullable"": true
+            }
+          ],
+          ""description"": ""The shift preferences for the user."",
+          ""x-ms-navigationProperty"": true
         }
       }
     }
@@ -216,12 +523,12 @@ namespace Microsoft.OpenApi.OData.Tests
             Assert.Null(declaredSchema.OneOf);
 
             Assert.NotNull(declaredSchema.Properties);
-            Assert.Equal(1, declaredSchema.Properties.Count);
+            Assert.Single(declaredSchema.Properties);
             var property = Assert.Single(declaredSchema.Properties);
             Assert.Equal("Price", property.Key);
-            Assert.Equal("decimal", property.Value.Format);
-            Assert.NotNull(property.Value.AnyOf);
-            Assert.Equal(new string[] { "number", "string" }, property.Value.AnyOf.Select(e => e.Type));
+            Assert.Equal("decimal", property.Value.OneOf.FirstOrDefault(x => !string.IsNullOrEmpty(x.Format))?.Format);
+            Assert.NotNull(property.Value.OneOf);
+            Assert.Equal(new string[] { "number", "string" }, property.Value.OneOf.Select(e => e.Type));
 
             Assert.Equal("Complex type 'Tree' description.", declaredSchema.Description);
             Assert.Equal("Tree", declaredSchema.Title);
@@ -241,16 +548,17 @@ namespace Microsoft.OpenApi.OData.Tests
       ""type"": ""object"",
       ""properties"": {
         ""Price"": {
-          ""multipleOf"": 1,
-          ""anyOf"": [
+          ""oneOf"": [
             {
-              ""type"": ""number""
+              ""type"": ""number"",
+              ""format"": ""decimal"",
+              ""nullable"": true
             },
             {
-              ""type"": ""string""
+              ""type"": ""string"",
+              ""nullable"": true
             }
-          ],
-          ""format"": ""decimal""
+          ]
         }
       },
       ""description"": ""Complex type 'Tree' description.""
@@ -308,19 +616,20 @@ namespace Microsoft.OpenApi.OData.Tests
     ""Id"": {
       ""maximum"": 2147483647,
       ""minimum"": -2147483648,
-      ""type"": ""integer"",
+      ""type"": ""number"",
       ""format"": ""int32""
     },
     ""Creatures"": {
       ""type"": ""array"",
       ""items"": {
         ""$ref"": ""#/components/schemas/NS.Creature""
-      }
+      },
+      ""x-ms-navigationProperty"": true
     }
   },
   ""description"": ""Entity type 'Zoo' description."",
   ""example"": {
-    ""Id"": ""integer (identifier)"",
+    ""Id"": ""number (identifier)"",
     ""Creatures"": [
       {
         ""@odata.type"": ""NS.Creature""
@@ -367,7 +676,7 @@ namespace Microsoft.OpenApi.OData.Tests
             Assert.Null(declaredSchema.OneOf);
 
             Assert.NotNull(declaredSchema.Properties);
-            Assert.Equal(1, declaredSchema.Properties.Count);
+            Assert.Single(declaredSchema.Properties);
             var property = Assert.Single(declaredSchema.Properties);
             Assert.Equal("Name", property.Key);
             Assert.Equal("string", property.Value.Type);
@@ -398,8 +707,8 @@ namespace Microsoft.OpenApi.OData.Tests
     }
   ],
   ""example"": {
-    ""Id"": ""integer (identifier)"",
-    ""Age"": ""integer"",
+    ""Id"": ""number (identifier)"",
+    ""Age"": ""number"",
     ""Name"": ""string""
   }
 }"
@@ -443,14 +752,40 @@ namespace Microsoft.OpenApi.OData.Tests
             Assert.Null(declaredSchema.OneOf);
 
             Assert.NotNull(declaredSchema.Properties);
-            Assert.Equal(1, declaredSchema.Properties.Count);
+            Assert.Single(declaredSchema.Properties);
             var property = Assert.Single(declaredSchema.Properties);
             Assert.Equal("Extra", property.Key);
-            Assert.Equal("integer", property.Value.Type);
+            Assert.Equal("number", property.Value.Type);
             Assert.Null(property.Value.OneOf);
 
             Assert.Equal("Customer", declaredSchema.Title);
         }
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void CreateStructuredTypeSchemaForEntityTypeWithDefaultValueForOdataTypePropertyEnabledOrDisabledReturnsCorrectSchema(bool enableTypeDisambiguationForOdataTypePropertyDefaultValue)
+        {
+            // Arrange
+            IEdmModel model = EdmModelHelper.GraphBetaModel;
+            ODataContext context = new(model, new OpenApiConvertSettings
+            {
+                EnableDiscriminatorValue = true,
+                EnableTypeDisambiguationForDefaultValueOfOdataTypeProperty = enableTypeDisambiguationForOdataTypePropertyDefaultValue
+            });
+
+            IEdmEntityType entityType = model.SchemaElements.OfType<IEdmEntityType>().First(t => t.Name == "event");
+            Assert.NotNull(entityType); // Guard
+
+            // Act
+            var schema = context.CreateStructuredTypeSchema(entityType);
+            string json = schema.SerializeAsJson(OpenApiSpecVersion.OpenApi3_0);
+
+            // Assert
+            Assert.NotNull(json);
+            Assert.Contains("\"default\": \"#microsoft.graph.event\"", json);
+        }
+
         #endregion
 
         #region EnumTypeSchema
@@ -527,7 +862,7 @@ namespace Microsoft.OpenApi.OData.Tests
 
             IEdmEnumType enumType = model.SchemaElements.OfType<IEdmEnumType>().First(e => e.Name == "Color");
             EdmEntityType entitType = new EdmEntityType("NS", "Entity");
-            IEdmProperty property = new EdmStructuralProperty(entitType, "ColorEnumValue", new EdmEnumTypeReference(enumType, false), "yellow");
+            IEdmProperty property = new EdmStructuralProperty(entitType, "ColorEnumValue", new EdmEnumTypeReference(enumType, false));
 
             // Act
             var schema = context.CreatePropertySchema(property);
@@ -545,12 +880,7 @@ namespace Microsoft.OpenApi.OData.Tests
             else
             {
                 Assert.Equal(@"{
-  ""anyOf"": [
-    {
-      ""$ref"": ""#/components/schemas/DefaultNs.Color""
-    }
-  ],
-  ""default"": ""yellow""
+  ""$ref"": ""#/components/schemas/DefaultNs.Color""
 }".ChangeLineBreaks(), json);
             }
         }
@@ -575,7 +905,7 @@ namespace Microsoft.OpenApi.OData.Tests
             Assert.NotNull(schema);
             string json = schema.SerializeAsJson(specVersion);
             _output.WriteLine(json);
-            
+
             // Assert
             if (specVersion == OpenApiSpecVersion.OpenApi2_0)
             {
@@ -589,10 +919,55 @@ namespace Microsoft.OpenApi.OData.Tests
   ""anyOf"": [
     {
       ""$ref"": ""#/components/schemas/DefaultNs.Color""
+    },
+    {
+      ""type"": ""object"",
+      ""nullable"": true
     }
   ],
-  ""default"": ""yellow"",
-  ""nullable"": true
+  ""default"": ""yellow""
+}".ChangeLineBreaks(), json);
+            }
+        }
+
+        [Theory]
+        [InlineData(OpenApiSpecVersion.OpenApi3_0)]
+        [InlineData(OpenApiSpecVersion.OpenApi2_0)]
+        public void CreatePropertySchemaWithComputedAnnotationReturnsCorrectSchema(OpenApiSpecVersion specVersion)
+        {
+            // Arrange
+            IEdmModel model = EdmModelHelper.GraphBetaModel;
+            ODataContext context = new(model);
+
+            context.Settings.OpenApiSpecVersion = specVersion;
+
+            IEdmEntityType entityType = model.SchemaElements.OfType<IEdmEntityType>().First(e => e.Name == "bookingAppointment");
+            IEdmProperty property = entityType.Properties().FirstOrDefault(x => x.Name == "duration");
+
+            // Act
+            var schema = context.CreatePropertySchema(property);
+            Assert.NotNull(schema);
+            string json = schema.SerializeAsJson(specVersion);
+
+            // Assert
+            if (specVersion == OpenApiSpecVersion.OpenApi2_0)
+            {
+                Assert.Equal(@"{
+  ""format"": ""duration"",
+  ""description"": ""The length of the appointment, denoted in ISO8601 format."",
+  ""pattern"": ""^-?P([0-9]+D)?(T([0-9]+H)?([0-9]+M)?([0-9]+([.][0-9]+)?S)?)?$"",
+  ""type"": ""string"",
+  ""readOnly"": true
+}".ChangeLineBreaks(), json);
+            }
+            else
+            {
+                Assert.Equal(@"{
+  ""pattern"": ""^-?P([0-9]+D)?(T([0-9]+H)?([0-9]+M)?([0-9]+([.][0-9]+)?S)?)?$"",
+  ""type"": ""string"",
+  ""description"": ""The length of the appointment, denoted in ISO8601 format."",
+  ""format"": ""duration"",
+  ""readOnly"": true
 }".ChangeLineBreaks(), json);
             }
         }
@@ -610,7 +985,7 @@ namespace Microsoft.OpenApi.OData.Tests
 
             // Act
             schema = Common.EdmModelHelper.GetDerivedTypesReferenceSchema(entityType, edmModel);
-            int derivedTypesCount = edmModel.FindDirectlyDerivedTypes(entityType).OfType<IEdmEntityType>().Count() + 1; // + 1 the base type
+            int derivedTypesCount = edmModel.FindAllDerivedTypes(entityType).OfType<IEdmEntityType>().Count() + 1; // + 1 the base type
 
             // Assert
             Assert.NotNull(schema.OneOf);
@@ -698,13 +1073,13 @@ namespace Microsoft.OpenApi.OData.Tests
 
             // Assert
             Assert.NotNull(schema);
-            Assert.Equal("integer", schema.Type);
+            Assert.Equal("number", schema.Type);
 
             string json = schema.SerializeAsJson(OpenApiSpecVersion.OpenApi3_0);
             Assert.Equal(@"{
   ""maximum"": 2147483647,
   ""minimum"": -2147483648,
-  ""type"": ""integer"",
+  ""type"": ""number"",
   ""format"": ""int32"",
   ""default"": -128
 }".ChangeLineBreaks(), json);
@@ -729,24 +1104,48 @@ namespace Microsoft.OpenApi.OData.Tests
             string json = schema.SerializeAsJson(OpenApiSpecVersion.OpenApi3_0);
 
             Assert.Equal(@"{
-  ""anyOf"": [
+  ""oneOf"": [
     {
-      ""type"": ""number""
+      ""type"": ""number"",
+      ""format"": ""double"",
+      ""nullable"": true
     },
     {
-      ""type"": ""string""
+      ""type"": ""string"",
+      ""nullable"": true
     },
     {
-      ""enum"": [
-        ""-INF"",
-        ""INF"",
-        ""NaN""
-      ]
+      ""$ref"": ""#/components/schemas/ReferenceNumeric""
     }
   ],
-  ""format"": ""double"",
   ""default"": ""3.1415926535897931""
 }".ChangeLineBreaks(), json);
+        }
+
+
+        [Fact]
+        public void NonNullableUntypedPropertyWorks()
+        {
+            ODataContext context = new ODataContext(
+                EdmModelHelper.BasicEdmModel,
+                new OpenApiConvertSettings 
+                { 
+                    ShowSchemaExamples = true
+                });
+            EdmEntityType entitType = new EdmEntityType("NS", "Entity");
+            IEdmStructuralProperty property = new EdmStructuralProperty(
+                entitType, "UntypedProperty", EdmCoreModel.Instance.GetUntyped());
+
+            // Act
+            var schema = context.CreatePropertySchema(property);
+
+            // Assert
+            Assert.NotNull(schema);
+            Assert.Null(schema.Type);
+
+            string json = schema.SerializeAsJson(OpenApiSpecVersion.OpenApi3_0);
+
+            Assert.Equal("{ }", json);
         }
     }
 }

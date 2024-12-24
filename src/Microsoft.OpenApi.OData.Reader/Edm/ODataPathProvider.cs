@@ -31,6 +31,10 @@ namespace Microsoft.OpenApi.OData.Edm
 
         private IEdmModel _model;
 
+        private readonly IDictionary<IEdmEntityType, IList<ODataPath>> _dollarCountPaths =
+           new Dictionary<IEdmEntityType, IList<ODataPath>>();
+
+
         /// <summary>
         /// Can filter the <see cref="IEdmElement"/> or not.
         /// </summary>
@@ -45,7 +49,7 @@ namespace Microsoft.OpenApi.OData.Edm
         /// <param name="settings">The conversion settings.</param>
         /// <returns>The collection of built <see cref="ODataPath"/>.</returns>
         public virtual IEnumerable<ODataPath> GetPaths(IEdmModel model, OpenApiConvertSettings settings)
-       {
+        {
            if (model == null || model.EntityContainer == null)
            {
                return Enumerable.Empty<ODataPath>();
@@ -92,13 +96,14 @@ namespace Microsoft.OpenApi.OData.Edm
         /// <param name="model">The Edm model.</param>
         protected virtual void Initialize(IEdmModel model)
         {
-            Debug.Assert(model != null);
+            Utils.CheckArgumentNull(model, nameof(model));
 
             _model = model;
             _allNavigationSources = model.LoadAllNavigationSources();
             _allNavigationSourcePaths.Clear();
             _allNavigationPropertyPaths.Clear();
             _allOperationPaths.Clear();
+            _dollarCountPaths.Clear();
         }
 
        private IEnumerable<ODataPath> MergePaths()
@@ -123,7 +128,7 @@ namespace Microsoft.OpenApi.OData.Edm
 
         private void AppendPath(ODataPath path)
         {
-            Debug.Assert(path != null);
+            Utils.CheckArgumentNull(path, nameof(path));
 
             ODataPathKind kind = path.Kind;
             switch(kind)
@@ -142,6 +147,25 @@ namespace Microsoft.OpenApi.OData.Edm
                             nsList = new List<ODataPath>();
                             _allNavigationSourcePaths[navigationSourceSegment.EntityType] = nsList;
                         }
+                        
+                        if (kind == ODataPathKind.DollarCount)
+                        {                          
+                            if (_allOperationPaths.FirstOrDefault(p => DollarCountAndOperationPathsSimilar(p, path)) is not null)
+                            {
+                                // Don't add a path for $count if a similar count() function path already exists.                                
+                                return;
+                            }
+                            else
+                            {
+                                if (!_dollarCountPaths.TryGetValue(navigationSourceSegment.EntityType, out IList<ODataPath> dollarPathList))
+                                {
+                                    dollarPathList = new List<ODataPath>();
+                                    _dollarCountPaths[navigationSourceSegment.EntityType] = dollarPathList;
+                                }
+                                dollarPathList.Add(path);
+                            }
+                        }
+                        
                         nsList.Add(path);
                     }
                     break;
@@ -161,11 +185,46 @@ namespace Microsoft.OpenApi.OData.Edm
 
                 case ODataPathKind.Operation:
                 case ODataPathKind.OperationImport:
+                    if (kind == ODataPathKind.Operation)
+                    {
+                        foreach (var kvp in _dollarCountPaths)
+                        {
+                            if (kvp.Value.FirstOrDefault(p => DollarCountAndOperationPathsSimilar(p, path)) is ODataPath dollarCountPath &&
+                                _allNavigationSourcePaths.TryGetValue(kvp.Key, out IList<ODataPath> dollarPathList))
+                            {
+                                dollarPathList.Remove(dollarCountPath);
+                                break;
+                            }
+                        }
+                    }
+
                     _allOperationPaths.Add(path);
                     break;
 
                 default:
                     return;
+            }
+
+            bool DollarCountAndOperationPathsSimilar(ODataPath path1, ODataPath path2)
+            {
+                if ((path1.Kind == ODataPathKind.DollarCount && 
+                    path2.Kind == ODataPathKind.Operation && path2.LastSegment.Identifier.Equals(Constants.CountSegmentIdentifier, StringComparison.OrdinalIgnoreCase)) ||
+                    (path2.Kind == ODataPathKind.DollarCount &&
+                    path1.Kind == ODataPathKind.Operation && path1.LastSegment.Identifier.Equals(Constants.CountSegmentIdentifier, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return GetModifiedPathItemName(path1)?.Equals(GetModifiedPathItemName(path2), StringComparison.OrdinalIgnoreCase) ?? false;
+                }
+
+                return false;                
+            }
+
+            string GetModifiedPathItemName(ODataPath path)
+            {
+                if (!path.Any()) return null;
+
+                IEnumerable<ODataSegment> modifiedSegments = path.Take(path.Count - 1);
+                ODataPath modifiedPath = new(modifiedSegments);
+                return modifiedPath.GetPathItemName();
             }
         }
 
@@ -176,29 +235,41 @@ namespace Microsoft.OpenApi.OData.Edm
         /// <param name="convertSettings">The settings for the current conversion.</param>
         private void RetrieveNavigationSourcePaths(IEdmNavigationSource navigationSource, OpenApiConvertSettings convertSettings)
         {
-            Debug.Assert(navigationSource != null);
+            Utils.CheckArgumentNull(navigationSource, nameof(navigationSource));
+            Utils.CheckArgumentNull(convertSettings, nameof(convertSettings));
 
             // navigation source itself
             ODataPath path = new(new ODataNavigationSourceSegment(navigationSource));
             AppendPath(path.Clone());
 
             IEdmEntitySet entitySet = navigationSource as IEdmEntitySet;
-            IEdmEntityType entityType = navigationSource.EntityType();
+            IEdmEntityType entityType = navigationSource.EntityType;
             CountRestrictionsType count = null;
+            bool? indexableByKey = false;
 
             // for entity set, create a path with key and a $count path
             if (entitySet != null)
             {
-                count = _model.GetRecord<CountRestrictionsType>(entitySet, CapabilitiesConstants.CountRestrictions);
+                string targetPath = path.GetTargetPath(_model);
+                count = _model.GetRecord<CountRestrictionsType>(targetPath, CapabilitiesConstants.CountRestrictions)
+                    ?? _model.GetRecord<CountRestrictionsType>(entitySet, CapabilitiesConstants.CountRestrictions);
                 if(count?.Countable ?? true) // ~/entitySet/$count
                     CreateCountPath(path, convertSettings);
 
                 CreateTypeCastPaths(path, convertSettings, entityType, entitySet, true); // ~/entitySet/subType
 
-                path.Push(new ODataKeySegment(entityType));
-                AppendPath(path.Clone());
+                if (convertSettings.AddAlternateKeyPaths)
+                    CreateAlternateKeyPath(path, entityType); //~/entitySet/{alternateKeyId}
 
-                CreateTypeCastPaths(path, convertSettings, entityType, entitySet, false); // ~/entitySet/{id}/subType
+                indexableByKey = _model.GetBoolean(targetPath, CapabilitiesConstants.IndexableByKey)
+                    ?? _model.GetBoolean(entitySet, CapabilitiesConstants.IndexableByKey);
+
+                if (indexableByKey ?? true)
+                {
+                    path.Push(new ODataKeySegment(entityType)); // ~/entitySet/{id}
+                    AppendPath(path.Clone());
+                    CreateTypeCastPaths(path, convertSettings, entityType, entitySet, false); // ~/entitySet/{id}/subType
+                }
             }
             else if (navigationSource is IEdmSingleton singleton)
             { // ~/singleton/subType
@@ -212,7 +283,7 @@ namespace Microsoft.OpenApi.OData.Edm
             RetrieveComplexPropertyPaths(entityType, path, convertSettings);
 
             // navigation property
-            foreach (IEdmNavigationProperty np in entityType.DeclaredNavigationProperties())
+            foreach (IEdmNavigationProperty np in entityType.NavigationProperties())
             {
                 if (CanFilter(np))
                 {
@@ -220,7 +291,7 @@ namespace Microsoft.OpenApi.OData.Edm
                 }
             }
 
-            if (entitySet != null)
+            if (entitySet != null && (indexableByKey ?? true))
             {
                 path.Pop(); // end of entity
             }
@@ -237,9 +308,9 @@ namespace Microsoft.OpenApi.OData.Edm
         /// <param name="convertSettings">The settings for the current conversion.</param>
         private void RetrieveComplexPropertyPaths(IEdmEntityType entityType, ODataPath currentPath, OpenApiConvertSettings convertSettings)
         {
-            Debug.Assert(entityType != null);
-            Debug.Assert(currentPath != null);
-            Debug.Assert(convertSettings != null);
+            Utils.CheckArgumentNull(entityType, nameof(entityType));
+            Utils.CheckArgumentNull(currentPath, nameof(currentPath));
+            Utils.CheckArgumentNull(convertSettings, nameof(convertSettings));
 
             if (!convertSettings.EnableNavigationPropertyPath) return;
 
@@ -247,37 +318,103 @@ namespace Microsoft.OpenApi.OData.Edm
                                                     .Where(x => x.Type.IsComplex() ||
                                                             x.Type.IsCollection() && x.Type.Definition.AsElementType() is IEdmComplexType))
             {
-                if (!ShouldCreateComplexPropertyPaths(sp, convertSettings)) continue;
-
                 currentPath.Push(new ODataComplexPropertySegment(sp));
+                var targetPath = currentPath.GetTargetPath(_model);
+                if (!ShouldCreateComplexPropertyPaths(sp, targetPath, convertSettings))
+                {
+                    currentPath.Pop();
+                    continue;
+                }
                 AppendPath(currentPath.Clone());
-
 
                 if (sp.Type.IsCollection())
                 {
                     CreateTypeCastPaths(currentPath, convertSettings, sp.Type.Definition.AsElementType() as IEdmComplexType, sp, true);
-                    var count = _model.GetRecord<CountRestrictionsType>(sp, CapabilitiesConstants.CountRestrictions);
-                    if(count?.IsCountable ?? true)
+                    var isCountable = _model.GetRecord<CountRestrictionsType>(targetPath, CapabilitiesConstants.CountRestrictions)?.IsCountable
+                        ?? _model.GetRecord<CountRestrictionsType>(sp, CapabilitiesConstants.CountRestrictions)?.IsCountable
+                        ?? true;
+                    if (isCountable)
                         CreateCountPath(currentPath, convertSettings);
                 }
                 else
                 {
-                    var complexTypeReference = sp.Type.AsComplex();
-                    var definition = complexTypeReference.ComplexDefinition();
+                    var complexType = sp.Type.AsComplex().ComplexDefinition();
 
-                    CreateTypeCastPaths(currentPath, convertSettings, definition, sp, false);
-                    foreach (IEdmNavigationProperty np in complexTypeReference
-                                                        .DeclaredNavigationProperties()
-                                                        .Union(definition
-                                                                        .FindAllBaseTypes()
-                                                                        .SelectMany(x => x.DeclaredNavigationProperties()))
-                                                        .Distinct()
-                                                        .Where(CanFilter))
-                    {
-                        var count = _model.GetRecord<CountRestrictionsType>(np, CapabilitiesConstants.CountRestrictions);
-                        RetrieveNavigationPropertyPaths(np, count, currentPath, convertSettings);
-                    }
+                    CreateTypeCastPaths(currentPath, convertSettings, complexType, sp, false);
+
+                    // Append navigation property paths for this complex property
+                    RetrieveComplexTypeNavigationPropertyPaths(complexType, currentPath, convertSettings);
+
+                    // Traverse this complex property to rerieve nested navigation property paths
+                    TraverseComplexProperty(sp, currentPath, convertSettings);
                 }
+
+                currentPath.Pop();
+            }
+        }
+
+        /// <summary>
+        /// Retrieves navigation property paths for complex types.
+        /// </summary>
+        /// <param name="complexType">The target complex type.</param>
+        /// <param name="currentPath">The current path.</param>
+        /// <param name="convertSettings">The convert settings.</param>
+        private bool RetrieveComplexTypeNavigationPropertyPaths(IEdmComplexType complexType, ODataPath currentPath, OpenApiConvertSettings convertSettings)
+        {
+            Utils.CheckArgumentNull(complexType, nameof(complexType));
+            Utils.CheckArgumentNull(currentPath, nameof(currentPath));
+            Utils.CheckArgumentNull(convertSettings, nameof(convertSettings));
+
+            var navigationProperties = complexType
+                                        .DeclaredNavigationProperties()
+                                        .Union(complexType
+                                                        .FindAllBaseTypes()
+                                                        .SelectMany(x => x.DeclaredNavigationProperties()))
+                                        .Distinct()
+                                        .Where(CanFilter);
+
+            if (!navigationProperties.Any()) return false;
+
+            foreach (var np in navigationProperties)
+            {
+                var targetPath = currentPath.GetTargetPath(_model);
+                var count = _model.GetRecord<CountRestrictionsType>(targetPath, CapabilitiesConstants.CountRestrictions)
+                    ?? _model.GetRecord<CountRestrictionsType>(np, CapabilitiesConstants.CountRestrictions);
+                RetrieveNavigationPropertyPaths(np, count, currentPath, convertSettings);
+            }
+
+            return true;
+        }
+
+
+        /// <summary>
+        /// Traverses a complex property to generate navigation property paths within nested complex properties.
+        /// </summary>
+        /// <param name="structuralProperty">The target complex property.</param>
+        /// <param name="currentPath">The current path.</param>
+        /// <param name="convertSettings">The convert settings.</param>
+        private void TraverseComplexProperty(IEdmStructuralProperty structuralProperty, ODataPath currentPath, OpenApiConvertSettings convertSettings)
+        {
+            Utils.CheckArgumentNull(structuralProperty, nameof(structuralProperty));
+            Utils.CheckArgumentNull(currentPath, nameof(currentPath));
+            Utils.CheckArgumentNull(convertSettings, nameof(convertSettings));
+
+            var complexType = structuralProperty.Type.AsComplex().ComplexDefinition();
+            Debug.Assert(complexType != null);
+
+            foreach (IEdmStructuralProperty sp in complexType.DeclaredStructuralProperties()
+                                                    .Where(x => x.Type.IsComplex() ||
+                                                            x.Type.IsCollection() && x.Type.Definition.AsElementType() is IEdmComplexType))
+            {
+                currentPath.Push(new ODataComplexPropertySegment(sp));
+
+                var spComplexType = sp.Type.AsComplex().ComplexDefinition();
+
+                if (!RetrieveComplexTypeNavigationPropertyPaths(spComplexType, currentPath, convertSettings))
+                {
+                    TraverseComplexProperty(sp, currentPath, convertSettings);
+                }
+
                 currentPath.Pop();
             }
         }
@@ -286,19 +423,26 @@ namespace Microsoft.OpenApi.OData.Edm
         /// Evaluates whether or not to create paths for complex properties.
         /// </summary>
         /// <param name="complexProperty">The target complex property.</param>
+        /// <param name="targetPath">The annotation target path for the complex property.</param>
         /// <param name="convertSettings">The settings for the current conversion.</param>
         /// <returns>true or false.</returns>
-        private bool ShouldCreateComplexPropertyPaths(IEdmStructuralProperty complexProperty, OpenApiConvertSettings convertSettings)
+        private bool ShouldCreateComplexPropertyPaths(IEdmStructuralProperty complexProperty, string targetPath, OpenApiConvertSettings convertSettings)
         {
-            Debug.Assert(complexProperty != null);
-            Debug.Assert(convertSettings != null);
+            Utils.CheckArgumentNull(complexProperty, nameof(complexProperty)); 
+            Utils.CheckArgumentNull(convertSettings, nameof(convertSettings));
 
             if (!convertSettings.RequireRestrictionAnnotationsToGenerateComplexPropertyPaths)
                 return true;
 
-            bool isReadable = _model.GetRecord<ReadRestrictionsType>(complexProperty, CapabilitiesConstants.ReadRestrictions)?.Readable ?? false;
-            bool isUpdatable = _model.GetRecord<UpdateRestrictionsType>(complexProperty, CapabilitiesConstants.UpdateRestrictions)?.Updatable ?? false;
-            bool isInsertable = _model.GetRecord<InsertRestrictionsType>(complexProperty, CapabilitiesConstants.InsertRestrictions)?.Insertable ?? false;
+            bool isReadable = _model.GetRecord<ReadRestrictionsType>(targetPath, CapabilitiesConstants.ReadRestrictions)?.Readable 
+                ?? _model.GetRecord<ReadRestrictionsType>(complexProperty, CapabilitiesConstants.ReadRestrictions)?.Readable 
+                ?? false;
+            bool isUpdatable = _model.GetRecord<UpdateRestrictionsType>(targetPath, CapabilitiesConstants.UpdateRestrictions)?.Updatable 
+                ??_model.GetRecord<UpdateRestrictionsType>(complexProperty, CapabilitiesConstants.UpdateRestrictions)?.Updatable 
+                ?? false;
+            bool isInsertable = _model.GetRecord<InsertRestrictionsType>(targetPath, CapabilitiesConstants.InsertRestrictions)?.Insertable
+                ?? _model.GetRecord<InsertRestrictionsType>(complexProperty, CapabilitiesConstants.InsertRestrictions)?.Insertable 
+                ?? false;
 
             return isReadable || isUpdatable || isInsertable;
         }
@@ -310,8 +454,8 @@ namespace Microsoft.OpenApi.OData.Edm
         /// <param name="currentPath">The current OData path.</param>
         private void RetrieveMediaEntityStreamPaths(IEdmEntityType entityType, ODataPath currentPath)
         {
-            Debug.Assert(entityType != null);
-            Debug.Assert(currentPath != null);
+            Utils.CheckArgumentNull(entityType, nameof(entityType));
+            Utils.CheckArgumentNull(currentPath, nameof(currentPath));
 
             bool createValuePath = true;
             foreach (IEdmStructuralProperty sp in entityType.StructuralProperties())
@@ -323,16 +467,16 @@ namespace Microsoft.OpenApi.OData.Edm
                     currentPath.Pop();
                 }
 
-                if (sp.Name.Equals("content", StringComparison.OrdinalIgnoreCase))
+                if (sp.Name.Equals(Constants.Content, StringComparison.OrdinalIgnoreCase))
                 {
                     createValuePath = false;
                 }
             }
 
-            /* Create a /$value path only if entity has stream and
+            /* Append a $value segment only if entity (or base type) has stream and
              * does not contain a structural property named Content
              */
-            if (createValuePath && entityType.HasStream)
+            if (createValuePath && (entityType.HasStream || ((entityType.BaseType as IEdmEntityType)?.HasStream ?? false)))
             {
                 currentPath.Push(new ODataStreamContentSegment());
                 AppendPath(currentPath.Clone());
@@ -355,8 +499,10 @@ namespace Microsoft.OpenApi.OData.Edm
             OpenApiConvertSettings convertSettings,
             Stack<string> visitedNavigationProperties = null)
         {
-            Debug.Assert(navigationProperty != null);
-            Debug.Assert(currentPath != null);
+            Utils.CheckArgumentNull(navigationProperty, nameof(navigationProperty));
+            Utils.CheckArgumentNull(currentPath, nameof(currentPath));
+            Utils.CheckArgumentNull(convertSettings, nameof(convertSettings));
+
 
             if (visitedNavigationProperties == null)
             {
@@ -402,28 +548,54 @@ namespace Microsoft.OpenApi.OData.Edm
             AppendPath(currentPath.Clone());
             visitedNavigationProperties.Push(navPropFullyQualifiedName);
 
+            // For fetching annotations
+            var targetPath = currentPath.GetTargetPath(_model);
+
             // Check whether a collection-valued navigation property should be indexed by key value(s).
-            bool indexableByKey = restriction?.IndexableByKey ?? true;
+            // Find indexability annotation annotated directly via NavigationPropertyRestriction.
+            bool? annotatedIndexability = _model.GetBoolean(targetPath, CapabilitiesConstants.IndexableByKey)
+                ?? _model.GetBoolean(navigationProperty, CapabilitiesConstants.IndexableByKey);
+            bool indexableByKey = true;
+
+            if (restriction?.IndexableByKey != null)
+            {
+                indexableByKey = (bool)restriction.IndexableByKey;
+            }
+            else if (annotatedIndexability != null)
+            {
+                indexableByKey = annotatedIndexability.Value;
+            }
 
             if (indexableByKey)
             {
                 IEdmEntityType navEntityType = navigationProperty.ToEntityType();
                 var targetsMany = navigationProperty.TargetMultiplicity() == EdmMultiplicity.Many;
-                var propertyPath = navigationProperty.GetPartnerPath()?.Path;
-                var propertyPathIsEmpty = string.IsNullOrEmpty(propertyPath);
-
-                if (targetsMany) 
+                
+                if (targetsMany)
                 {
-                    if(propertyPathIsEmpty ||
-                        (count?.IsNonCountableNavigationProperty(propertyPath) ?? true))
+                    bool? createCountPath = null;
+                    if (count == null)
+                    {
+                        // First, get the directly annotated restriction annotation of the navigation property
+                        count = _model.GetRecord<CountRestrictionsType>(targetPath, CapabilitiesConstants.CountRestrictions)
+                            ?? _model.GetRecord<CountRestrictionsType>(navigationProperty, CapabilitiesConstants.CountRestrictions);
+                        createCountPath = count?.Countable;
+                    }
+
+                    var propertyPath = navigationProperty.GetPartnerPath()?.Path;
+                    createCountPath ??= string.IsNullOrEmpty(propertyPath)
+                        || (count?.IsNonCountableNavigationProperty(propertyPath) ?? true);
+
+                    if (createCountPath.Value)
                     {
                         // ~/entityset/{key}/collection-valued-Nav/$count
                         CreateCountPath(currentPath, convertSettings);
                     }
                 }
+
                 // ~/entityset/{key}/collection-valued-Nav/subtype
                 // ~/entityset/{key}/single-valued-Nav/subtype
-                CreateTypeCastPaths(currentPath, convertSettings, navigationProperty.DeclaringType, navigationProperty, targetsMany);
+                CreateTypeCastPaths(currentPath, convertSettings, navEntityType, navigationProperty, targetsMany);
 
                 if ((navSourceRestrictionType?.Referenceable ?? false) ||
                     (navPropRestrictionType?.Referenceable ?? false))
@@ -439,7 +611,7 @@ namespace Microsoft.OpenApi.OData.Edm
                         currentPath.Push(new ODataKeySegment(navEntityType));
                         CreateRefPath(currentPath);
 
-                        CreateTypeCastPaths(currentPath, convertSettings, navigationProperty.DeclaringType, navigationProperty, false); // ~/entityset/{key}/collection-valued-Nav/{id}/subtype
+                        CreateTypeCastPaths(currentPath, convertSettings, navEntityType, navigationProperty, false); // ~/entityset/{key}/collection-valued-Nav/{id}/subtype
                     }
 
                     // Get possible stream paths for the navigation entity type
@@ -453,10 +625,12 @@ namespace Microsoft.OpenApi.OData.Edm
                     // append a navigation property key.
                     if (targetsMany)
                     {
+                        CreateAlternateKeyPath(currentPath, navEntityType);
+
                         currentPath.Push(new ODataKeySegment(navEntityType));
                         AppendPath(currentPath.Clone());
 
-                        CreateTypeCastPaths(currentPath, convertSettings, navigationProperty.DeclaringType, navigationProperty, false); // ~/entityset/{key}/collection-valued-Nav/{id}/subtype
+                        CreateTypeCastPaths(currentPath, convertSettings, navEntityType, navigationProperty, false); // ~/entityset/{key}/collection-valued-Nav/{id}/subtype
                     }
 
                     // Get possible stream paths for the navigation entity type
@@ -468,7 +642,7 @@ namespace Microsoft.OpenApi.OData.Edm
                     if (shouldExpand)
                     {
                         // expand to sub navigation properties
-                        foreach (IEdmNavigationProperty subNavProperty in navEntityType.DeclaredNavigationProperties())
+                        foreach (IEdmNavigationProperty subNavProperty in navEntityType.NavigationProperties())
                         {
                             if (CanFilter(subNavProperty))
                             {
@@ -493,6 +667,8 @@ namespace Microsoft.OpenApi.OData.Edm
         /// <param name="currentPath">The current OData path.</param>
         private void CreateRefPath(ODataPath currentPath)
         {
+            Utils.CheckArgumentNull(currentPath, nameof(currentPath));
+
             ODataPath newPath = currentPath.Clone();
             newPath.Push(ODataRefSegment.Instance); // $ref
             AppendPath(newPath);
@@ -505,12 +681,39 @@ namespace Microsoft.OpenApi.OData.Edm
         /// <param name="convertSettings">The settings for the current conversion.</param>
         private void CreateCountPath(ODataPath currentPath, OpenApiConvertSettings convertSettings)
         {
-            if(currentPath == null) throw new ArgumentNullException(nameof(currentPath));
-            if(convertSettings == null) throw new ArgumentNullException(nameof(convertSettings));
-            if(!convertSettings.EnableDollarCountPath) return;
+            Utils.CheckArgumentNull(currentPath, nameof(currentPath));
+            Utils.CheckArgumentNull(convertSettings, nameof(convertSettings));
+
+            if(!convertSettings.EnableDollarCountPath) 
+                return;
+
             var countPath = currentPath.Clone();
             countPath.Push(ODataDollarCountSegment.Instance);
             AppendPath(countPath);
+        }
+
+        /// <summary>
+        /// Create path with alternate key
+        /// </summary>
+        /// <param name="currentPath">The current OData path.</param>
+        /// <param name="entityType">The entityType with alternate keys</param>
+        private void CreateAlternateKeyPath(ODataPath currentPath, IEdmEntityType entityType)
+        {
+            Utils.CheckArgumentNull(currentPath, nameof(currentPath));
+            Utils.CheckArgumentNull(entityType, nameof(entityType));
+
+            IEnumerable<IDictionary<string, IEdmProperty>> alternateKeys = _model.GetAlternateKeysAnnotation(entityType);
+            foreach (var keyDict in alternateKeys)
+            {
+                ODataPath keyPath = currentPath.Clone();
+                IDictionary<string, string> keyMappings = keyDict.ToDictionary(static k => k.Key, static v => v.Value.Name);
+                ODataKeySegment keySegment = new(entityType, keyMappings)
+                {
+                    IsAlternateKey = true
+                };
+                keyPath.Push(keySegment);
+                AppendPath(keyPath);
+            }
         }
 
         /// <summary>
@@ -523,15 +726,18 @@ namespace Microsoft.OpenApi.OData.Edm
         /// <param name="targetsMany">Whether the annotable navigation source targets many entities.</param>
         private void CreateTypeCastPaths(ODataPath currentPath, OpenApiConvertSettings convertSettings, IEdmStructuredType structuredType, IEdmVocabularyAnnotatable annotable, bool targetsMany)
         {
-            if(currentPath == null) throw Error.ArgumentNull(nameof(currentPath));
-            if(convertSettings == null) throw Error.ArgumentNull(nameof(convertSettings));
-            if(structuredType == null) throw Error.ArgumentNull(nameof(structuredType));
-            if(annotable == null) throw Error.ArgumentNull(nameof(annotable));
-            if(!convertSettings.EnableODataTypeCast) return;
+            Utils.CheckArgumentNull(currentPath, nameof(currentPath));
+            Utils.CheckArgumentNull(convertSettings, nameof(convertSettings));
+            Utils.CheckArgumentNull(structuredType, nameof(structuredType));
+            Utils.CheckArgumentNull(annotable, nameof(annotable));
+
+            if(!convertSettings.EnableODataTypeCast)
+                return;
 
             var annotedTypeNames = GetDerivedTypeConstaintTypeNames(annotable);
             
-            if(!annotedTypeNames.Any() && convertSettings.RequireDerivedTypesConstraintForODataTypeCastSegments) return; // we don't want to generate any downcast path item if there is no type cast annotation.
+            if(!annotedTypeNames.Any() && convertSettings.RequireDerivedTypesConstraintForODataTypeCastSegments) 
+                return; // we don't want to generate any downcast path item if there is no type cast annotation.
 
             var annotedTypeNamesSet = new HashSet<string>(annotedTypeNames, StringComparer.OrdinalIgnoreCase);
 
@@ -548,20 +754,43 @@ namespace Microsoft.OpenApi.OData.Edm
                                 .OfType<IEdmStructuredType>()
                                 .ToArray();
 
-            foreach(var targetType in targetTypes) 
+            foreach (var targetType in targetTypes)
             {
+                var targetTypeSegment = new ODataTypeCastSegment(targetType, _model);
+
+                if (currentPath.Segments.Any(x => x.Identifier.Equals(targetTypeSegment.Identifier)))
+                {
+                    // In case we have expanded a derived type's navigation property
+                    // and we are in a cyclic loop where the expanded navigation property
+                    // has a derived type that has already been added to the path.
+                    continue;
+                }
+
                 var castPath = currentPath.Clone();
-                castPath.Push(new ODataTypeCastSegment(targetType));
+                castPath.Push(targetTypeSegment);
                 AppendPath(castPath);
-                if(targetsMany) 
+                if (targetsMany)
                 {
                     CreateCountPath(castPath, convertSettings);
                 }
                 else
                 {
-                    foreach(var declaredNavigationProperty in targetType.DeclaredNavigationProperties())
+                    if (convertSettings.GenerateDerivedTypesProperties)
                     {
-                        RetrieveNavigationPropertyPaths(declaredNavigationProperty, null, castPath, convertSettings);
+                        if (annotable is IEdmNavigationProperty navigationProperty && !navigationProperty.ContainsTarget)
+                        {
+                            continue;
+                        }
+
+                        foreach (var declaredNavigationProperty in targetType.NavigationProperties())
+                        {
+                            RetrieveNavigationPropertyPaths(declaredNavigationProperty, null, castPath, convertSettings);
+                        }
+                        
+                        if (targetType is IEdmEntityType entityType)
+                        {
+                            RetrieveComplexPropertyPaths(entityType, castPath, convertSettings);
+                        }                                                
                     }
                 }
             }
@@ -572,7 +801,8 @@ namespace Microsoft.OpenApi.OData.Edm
         /// </summary>
         private void RetrieveBoundOperationPaths(OpenApiConvertSettings convertSettings)
         {
-            foreach (var edmOperation in _model.GetAllElements().OfType<IEdmOperation>().Where(e => e.IsBound))
+            var edmOperations = _model.GetAllElements().OfType<IEdmOperation>().Where(x => x.IsBound).ToArray();
+            foreach (var edmOperation in edmOperations)
             {
                 if (!CanFilter(edmOperation))
                 {
@@ -592,59 +822,127 @@ namespace Microsoft.OpenApi.OData.Edm
                     continue;
                 }
 
-                var firstEntityType = bindingType.AsEntity().EntityDefinition();
+                var allEntitiesForOperation = GetAllEntitiesForOperation(bindingType);
 
-                bool filter(IEdmNavigationSource z) =>
-                    z.EntityType() != firstEntityType &&
-                    z.EntityType().FindAllBaseTypes().Contains(firstEntityType);
-
-                var allEntitiesForOperation = new IEdmEntityType[] { firstEntityType }
-                    .Union(_model.EntityContainer.EntitySets()
-                            .Where(filter).Select(x => x.EntityType())) //Search all EntitySets
-                    .Union(_model.EntityContainer.Singletons()
-                            .Where(filter).Select(x => x.EntityType())) //Search all singletons
-                    .Distinct()
-                    .ToList();
-                
                 foreach (var bindingEntityType in allEntitiesForOperation)
                 {
                     // 1. Search for corresponding navigation source path
-                    if (AppendBoundOperationOnNavigationSourcePath(edmOperation, isCollection, bindingEntityType))
-                    {
-                        continue;
-                    }
+                    AppendBoundOperationOnNavigationSourcePath(edmOperation, isCollection, bindingEntityType, convertSettings);
 
                     // 2. Search for generated navigation property
-                    if (AppendBoundOperationOnNavigationPropertyPath(edmOperation, isCollection, bindingEntityType))
-                    {
-                        continue;
-                    }
+                    AppendBoundOperationOnNavigationPropertyPath(edmOperation, isCollection, bindingEntityType);
 
                     // 3. Search for derived
-                    if (AppendBoundOperationOnDerived(edmOperation, isCollection, bindingEntityType, convertSettings))
-                    {
-                        continue;
-                    }
+                    AppendBoundOperationOnDerived(edmOperation, isCollection, bindingEntityType, convertSettings);
 
                     // 4. Search for derived generated navigation property
-                    if (AppendBoundOperationOnDerivedNavigationPropertyPath(edmOperation, isCollection, bindingEntityType, convertSettings))
-                    {
-                        continue;
-                    }
+                    AppendBoundOperationOnDerivedNavigationPropertyPath(edmOperation, isCollection, bindingEntityType, convertSettings);
+                }
+            }
 
+            // all operations appended to properties
+            // append bound operations to functions
+            foreach (var edmOperation in edmOperations)
+            {
+                if (!CanFilter(edmOperation))
+                {
+                    continue;
+                }
+
+                IEdmOperationParameter bindingParameter = edmOperation.Parameters.First();
+                IEdmTypeReference bindingType = bindingParameter.Type;
+
+                bool isCollection = bindingType.IsCollection();
+                if (isCollection)
+                {
+                    bindingType = bindingType.AsCollection().ElementType();
+                }
+                if (!bindingType.IsEntity())
+                {
+                    continue;
+                }
+
+                var allEntitiesForOperation = GetAllEntitiesForOperation(bindingType);
+
+                foreach (var bindingEntityType in allEntitiesForOperation)
+                {
+                    AppendBoundOperationOnOperationPath(edmOperation, isCollection, bindingEntityType);
+                }
+            }
+
+            // append navigation properties to functions with return type
+            var functionPaths = _allOperationPaths.Where(x => x.LastSegment is ODataOperationSegment operationSegment
+                                                    && operationSegment.Operation is IEdmFunction edmFunction
+                                                    && edmFunction.IsComposable
+                                                    && edmFunction.ReturnType != null
+                                                    && edmFunction.ReturnType.Definition is IEdmEntityType returnBindingEntityType);
+
+            foreach( var functionPath in functionPaths)
+            {
+                if (functionPath.LastSegment is not ODataOperationSegment operationSegment
+                                                    || operationSegment.Operation is not IEdmFunction edmFunction
+                                                    || !edmFunction.IsComposable
+                                                    || edmFunction.ReturnType == null
+                                                    || edmFunction.ReturnType.Definition is not IEdmEntityType returnBindingEntityType)
+                {
+                    continue;
+                }
+
+                ODataSegment secondLastSeg = functionPath.ElementAt(functionPath.Count - 2);
+                if (convertSettings.ComposableFunctionsExpansionDepth < 2 &&
+                            functionPath.LastSegment is ODataOperationSegment &&
+                            secondLastSeg is ODataOperationSegment)
+                {
+                    // Only one level of composable functions expansion allowed
+                    continue;
+                }
+
+                foreach (var navProperty in returnBindingEntityType.NavigationProperties())
+                {
+                    /* Get number of segments already appended after the first composable function segment
+                     */
+                    int composableFuncSegIndex = functionPath.Segments.IndexOf(
+                        functionPath.Segments.FirstOrDefault(
+                            x => x is ODataOperationSegment operationSegment &&
+                            operationSegment.Operation is IEdmFunction edmFunction &&
+                            edmFunction.IsComposable));                   
+                    int currentDepth = functionPath.Count - composableFuncSegIndex - 1;
+
+                    if (currentDepth < convertSettings.ComposableFunctionsExpansionDepth)
+                    {
+                        ODataPath newNavigationPath = functionPath.Clone();
+                        newNavigationPath.Push(new ODataNavigationPropertySegment(navProperty));
+                        AppendPath(newNavigationPath);
+                    }                   
                 }
             }
         }
+
+        private List<IEdmEntityType> GetAllEntitiesForOperation(IEdmTypeReference bindingType)
+        {
+            var firstEntityType = bindingType.AsEntity().EntityDefinition();
+
+            bool filter(IEdmNavigationSource z) =>
+                z.EntityType != firstEntityType &&
+                z.EntityType.FindAllBaseTypes().Contains(firstEntityType);
+
+            return new IEdmEntityType[] { firstEntityType }
+                    .Union(_model.EntityContainer.EntitySets()
+                            .Where(filter).Select(x => x.EntityType)) //Search all EntitySets
+                    .Union(_model.EntityContainer.Singletons()
+                            .Where(filter).Select(x => x.EntityType)) //Search all singletons
+                    .Distinct()
+                    .ToList();
+        }
+
         private static readonly HashSet<ODataPathKind> _oDataPathKindsToSkipForOperationsWhenSingle = new() {
             ODataPathKind.EntitySet,
             ODataPathKind.MediaEntity,
             ODataPathKind.DollarCount,
             ODataPathKind.ComplexProperty,
         };
-        private bool AppendBoundOperationOnNavigationSourcePath(IEdmOperation edmOperation, bool isCollection, IEdmEntityType bindingEntityType)
+        private void AppendBoundOperationOnNavigationSourcePath(IEdmOperation edmOperation, bool isCollection, IEdmEntityType bindingEntityType, OpenApiConvertSettings convertSettings)
         {
-            bool found = false;
-
             if (_allNavigationSourcePaths.TryGetValue(bindingEntityType, out IList<ODataPath> value))
             {
                 bool isEscapedFunction = _model.IsUrlEscapeFunction(edmOperation);
@@ -668,22 +966,34 @@ namespace Microsoft.OpenApi.OData.Edm
                         ((isCollection && subPath.Kind == ODataPathKind.EntitySet) ||
                             (!isCollection && !_oDataPathKindsToSkipForOperationsWhenSingle.Contains(subPath.Kind))))
                     {
+                        if (lastPathSegment is ODataTypeCastSegment && !convertSettings.AppendBoundOperationsOnDerivedTypeCastSegments) continue;
+                        if (lastPathSegment is ODataKeySegment segment && segment.IsAlternateKey) continue;
+
+                        var annotatable = (lastPathSegment as ODataNavigationSourceSegment)?.NavigationSource as IEdmVocabularyAnnotatable;
+                        annotatable ??= (lastPathSegment as ODataKeySegment)?.EntityType;
+                        
+                        if (annotatable != null && !EdmModelHelper.IsOperationAllowed(_model, edmOperation, annotatable))
+                        {
+                            // Check whether the navigation source is allowed to have an operation on the entity type
+                            annotatable = (secondLastPathSegment as ODataNavigationSourceSegment)?.NavigationSource as IEdmVocabularyAnnotatable;
+                            if (annotatable != null && !EdmModelHelper.IsOperationAllowed(_model, edmOperation, annotatable))
+                            {
+                                continue;
+                            }                          
+                        }
+
                         ODataPath newPath = subPath.Clone();
-                        newPath.Push(new ODataOperationSegment(edmOperation, isEscapedFunction));
+                        newPath.Push(new ODataOperationSegment(edmOperation, isEscapedFunction, _model));
                         AppendPath(newPath);
-                        found = true;
                     }
                 }
             }
-
-            return found;
         }
         private static readonly HashSet<ODataPathKind> _pathKindToSkipForNavigationProperties = new () {
             ODataPathKind.Ref,
         };
-        private bool AppendBoundOperationOnNavigationPropertyPath(IEdmOperation edmOperation, bool isCollection, IEdmEntityType bindingEntityType)
+        private void AppendBoundOperationOnNavigationPropertyPath(IEdmOperation edmOperation, bool isCollection, IEdmEntityType bindingEntityType)
         {
-            bool found = false;
             bool isEscapedFunction = _model.IsUrlEscapeFunction(edmOperation);
 
             if (_allNavigationPropertyPaths.TryGetValue(bindingEntityType, out IList<ODataPath> value))
@@ -691,8 +1001,8 @@ namespace Microsoft.OpenApi.OData.Edm
                 foreach (var path in value.Where(x => !_pathKindToSkipForNavigationProperties.Contains(x.Kind)))
                 {
                     ODataNavigationPropertySegment npSegment = path.Segments.Last(s => s is ODataNavigationPropertySegment) as ODataNavigationPropertySegment;
-
-                    if (!npSegment.NavigationProperty.ContainsTarget)
+                    
+                    if (!EdmModelHelper.IsOperationAllowed(_model, edmOperation, npSegment.NavigationProperty, npSegment.NavigationProperty.ContainsTarget))
                     {
                         continue;
                     }
@@ -720,23 +1030,19 @@ namespace Microsoft.OpenApi.OData.Edm
                     }
 
                     ODataPath newPath = path.Clone();
-                    newPath.Push(new ODataOperationSegment(edmOperation, isEscapedFunction));
+                    newPath.Push(new ODataOperationSegment(edmOperation, isEscapedFunction, _model));
                     AppendPath(newPath);
-                    found = true;
                 }
             }
-
-            return found;
         }
 
-        private bool AppendBoundOperationOnDerived(
+        private void AppendBoundOperationOnDerived(
             IEdmOperation edmOperation,
             bool isCollection,
             IEdmEntityType bindingEntityType,
             OpenApiConvertSettings convertSettings)
         {
-            bool found = false;
-
+            if (!convertSettings.AppendBoundOperationsOnDerivedTypeCastSegments) return;
             bool isEscapedFunction = _model.IsUrlEscapeFunction(edmOperation);
             foreach (var baseType in bindingEntityType.FindAllBaseTypes())
             {
@@ -752,39 +1058,39 @@ namespace Microsoft.OpenApi.OData.Edm
                             continue;
                         }
 
+                        if (!EdmModelHelper.IsOperationAllowed(_model, edmOperation, ns as IEdmVocabularyAnnotatable))
+                        {
+                            continue;
+                        }
+
                         if (isCollection)
                         {
                             if (ns is IEdmEntitySet)
                             {
-                                ODataPath newPath = new ODataPath(new ODataNavigationSourceSegment(ns), new ODataTypeCastSegment(bindingEntityType),
-                                    new ODataOperationSegment(edmOperation, isEscapedFunction));
+                                ODataPath newPath = new ODataPath(new ODataNavigationSourceSegment(ns), new ODataTypeCastSegment(bindingEntityType, _model),
+                                    new ODataOperationSegment(edmOperation, isEscapedFunction, _model));
                                 AppendPath(newPath);
-                                found = true;
                             }
                         }
                         else
                         {
                             if (ns is IEdmSingleton)
                             {
-                                ODataPath newPath = new ODataPath(new ODataNavigationSourceSegment(ns), new ODataTypeCastSegment(bindingEntityType),
-                                    new ODataOperationSegment(edmOperation, isEscapedFunction));
+                                ODataPath newPath = new ODataPath(new ODataNavigationSourceSegment(ns), new ODataTypeCastSegment(bindingEntityType, _model),
+                                    new ODataOperationSegment(edmOperation, isEscapedFunction, _model));
                                 AppendPath(newPath);
-                                found = true;
                             }
                             else
                             {
-                                ODataPath newPath = new ODataPath(new ODataNavigationSourceSegment(ns), new ODataKeySegment(ns.EntityType()),
-                                    new ODataTypeCastSegment(bindingEntityType),
-                                    new ODataOperationSegment(edmOperation, isEscapedFunction));
+                                ODataPath newPath = new ODataPath(new ODataNavigationSourceSegment(ns), new ODataKeySegment(ns.EntityType),
+                                    new ODataTypeCastSegment(bindingEntityType , _model),
+                                    new ODataOperationSegment(edmOperation, isEscapedFunction, _model));
                                 AppendPath(newPath);
-                                found = true;
                             }
                         }
                     }
                 }
             }
-
-            return found;
         }
 
         private bool HasUnsatisfiedDerivedTypeConstraint(
@@ -799,13 +1105,13 @@ namespace Microsoft.OpenApi.OData.Edm
         private IEnumerable<string> GetDerivedTypeConstaintTypeNames(IEdmVocabularyAnnotatable annotatable) =>
             _model.GetCollection(annotatable, "Org.OData.Validation.V1.DerivedTypeConstraint") ?? Enumerable.Empty<string>();
 
-        private bool AppendBoundOperationOnDerivedNavigationPropertyPath(
+        private void AppendBoundOperationOnDerivedNavigationPropertyPath(
             IEdmOperation edmOperation,
             bool isCollection,
             IEdmEntityType bindingEntityType,
             OpenApiConvertSettings convertSettings)
         {
-            bool found = false;
+            if (!convertSettings.AppendBoundOperationsOnDerivedTypeCastSegments) return;
             bool isEscapedFunction = _model.IsUrlEscapeFunction(edmOperation);
 
             foreach (var baseType in bindingEntityType.FindAllBaseTypes())
@@ -820,7 +1126,7 @@ namespace Microsoft.OpenApi.OData.Edm
                             continue;
                         }
 
-                        if (!npSegment.NavigationProperty.ContainsTarget)
+                        if (!EdmModelHelper.IsOperationAllowed(_model, edmOperation, npSegment.NavigationProperty, npSegment.NavigationProperty.ContainsTarget))
                         {
                             continue;
                         }
@@ -849,7 +1155,7 @@ namespace Microsoft.OpenApi.OData.Edm
                         }
 
                         if (HasUnsatisfiedDerivedTypeConstraint(
-                                npSegment.NavigationProperty as IEdmVocabularyAnnotatable,
+                                npSegment.NavigationProperty,
                                 baseType,
                                 convertSettings))
                         {
@@ -857,15 +1163,45 @@ namespace Microsoft.OpenApi.OData.Edm
                         }
 
                         ODataPath newPath = path.Clone();
-                        newPath.Push(new ODataTypeCastSegment(bindingEntityType));
-                        newPath.Push(new ODataOperationSegment(edmOperation, isEscapedFunction));
+                        newPath.Push(new ODataTypeCastSegment(bindingEntityType, _model));
+                        newPath.Push(new ODataOperationSegment(edmOperation, isEscapedFunction, _model));
                         AppendPath(newPath);
-                        found = true;
                     }
                 }
             }
+        }
 
-            return found;
+        private void AppendBoundOperationOnOperationPath(IEdmOperation edmOperation, bool isCollection, IEdmEntityType bindingEntityType)
+        {
+            bool isEscapedFunction = _model.IsUrlEscapeFunction(edmOperation);
+
+            // only composable functions
+            var paths = _allOperationPaths.Where(x => x.LastSegment is ODataOperationSegment operationSegment
+                                                    && operationSegment.Operation is IEdmFunction edmFunction
+                                                    && edmFunction.IsComposable).ToList();
+
+            foreach (var path in paths)
+            {
+                if (path.LastSegment is not ODataOperationSegment operationSegment 
+                    || (path.Segments.Count > 1 && path.Segments[path.Segments.Count - 2] is ODataOperationSegment)
+                    || operationSegment.Operation is not IEdmFunction edmFunction || !edmFunction.IsComposable
+                    || edmFunction.ReturnType == null || !edmFunction.ReturnType.Definition.Equals(bindingEntityType)
+                    || isCollection
+                    || !EdmModelHelper.IsOperationAllowed(_model, edmOperation, operationSegment.Operation, true))
+                {
+                    continue;
+                }
+
+                var segName = path.LastSegment as ODataOperationSegment;
+                if (edmOperation.Name.Equals(segName?.Identifier))
+                {
+                    continue;
+                }
+
+                ODataPath newOperationPath = path.Clone();
+                newOperationPath.Push(new ODataOperationSegment(edmOperation, isEscapedFunction, _model));
+                AppendPath(newOperationPath);
+            }
         }
     }
 }

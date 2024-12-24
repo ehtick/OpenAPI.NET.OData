@@ -13,7 +13,7 @@ namespace Microsoft.OpenApi.OData.Edm
     public static class EdmTypeExtensions
     {
         /// <summary>
-        /// Determines wether a path parameter should be wrapped in quotes based on the type of the parameter.
+        /// Determines whether a path parameter should be wrapped in quotes based on the type of the parameter.
         /// </summary>
         /// <param name="edmType">The type of the parameter.</param>
         /// <param name="settings">The conversion settings.</param>
@@ -28,7 +28,7 @@ namespace Microsoft.OpenApi.OData.Edm
             return edmType.TypeKind switch
             {
                 EdmTypeKind.Enum => true,
-                EdmTypeKind.Primitive when edmType.IsString() || edmType.IsTemporal() => true,
+                EdmTypeKind.Primitive when edmType.IsString() => true,
                 _ => false,
             };
         }

@@ -3,7 +3,7 @@
   "info": {
     "title": "OData Service for namespace Default",
     "description": "This OData service is located at http://localhost",
-    "version": "1.0.1"
+    "version": "1.0.0"
   },
   "host": "localhost",
   "schemes": [
@@ -147,9 +147,9 @@
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of CategoryDto",
+            "description": "The unique identifier of CategoryDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -211,9 +211,9 @@
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of CategoryDto",
+            "description": "The unique identifier of CategoryDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -249,9 +249,9 @@
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of CategoryDto",
+            "description": "The unique identifier of CategoryDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -278,8 +278,19 @@
     },
     "/Categories/$count": {
       "get": {
+        "tags": [
+          "Categories.CategoryDto"
+        ],
         "summary": "Get the number of the resource",
-        "operationId": "Get.Count.Categories-2f72",
+        "operationId": "Categories.GetCount-2f72",
+        "parameters": [
+          {
+            "$ref": "#/parameters/search"
+          },
+          {
+            "$ref": "#/parameters/filter"
+          }
+        ],
         "responses": {
           "200": {
             "$ref": "#/responses/ODataCountResponse"
@@ -442,9 +453,9 @@
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of DocumentDto",
+            "description": "The unique identifier of DocumentDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -512,9 +523,9 @@
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of DocumentDto",
+            "description": "The unique identifier of DocumentDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -550,9 +561,9 @@
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of DocumentDto",
+            "description": "The unique identifier of DocumentDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -580,20 +591,17 @@
     "/Documents({Id})/Default.Upload": {
       "post": {
         "tags": [
-          "Documents.Actions"
+          "Documents.DocumentDto"
         ],
         "summary": "Invoke action Upload",
         "operationId": "Documents.DocumentDto.Upload",
-        "produces": [
-          "application/json"
-        ],
         "parameters": [
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of DocumentDto",
+            "description": "The unique identifier of DocumentDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -602,10 +610,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/Siterra.Documents.App.DTO.DocumentDto"
-            }
+            "$ref": "#/responses/UploadResponse"
           },
           "default": {
             "$ref": "#/responses/error"
@@ -626,9 +631,9 @@
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of DocumentDto",
+            "description": "The unique identifier of DocumentDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -755,14 +760,14 @@
           "Documents.RevisionDto"
         ],
         "summary": "Delete ref of navigation property Revisions for Documents",
-        "operationId": "Documents.DeleteRefRevisions",
+        "operationId": "Documents.revisions.DeleteRefRevisionDto",
         "parameters": [
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of DocumentDto",
+            "description": "The unique identifier of DocumentDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -771,9 +776,9 @@
           {
             "in": "path",
             "name": "Id1",
-            "description": "key: Id of RevisionDto",
+            "description": "The unique identifier of RevisionDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -783,12 +788,6 @@
             "in": "header",
             "name": "If-Match",
             "description": "ETag",
-            "type": "string"
-          },
-          {
-            "in": "query",
-            "name": "@id",
-            "description": "Delete Uri",
             "type": "string"
           }
         ],
@@ -806,19 +805,28 @@
     },
     "/Documents({Id})/Revisions/$count": {
       "get": {
+        "tags": [
+          "Documents.RevisionDto"
+        ],
         "summary": "Get the number of the resource",
-        "operationId": "Get.Count.Revisions-f834",
+        "operationId": "Documents.Revisions.GetCount-f834",
         "parameters": [
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of DocumentDto",
+            "description": "The unique identifier of DocumentDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
             "x-ms-docs-key-type": "DocumentDto"
+          },
+          {
+            "$ref": "#/parameters/search"
+          },
+          {
+            "$ref": "#/parameters/filter"
           }
         ],
         "responses": {
@@ -843,9 +851,9 @@
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of DocumentDto",
+            "description": "The unique identifier of DocumentDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -928,43 +936,67 @@
         ],
         "summary": "Create new navigation property ref to Revisions for Documents",
         "operationId": "Documents.CreateRefRevisions",
-        "consumes": [
-          "application/json"
-        ],
-        "produces": [
-          "application/json"
-        ],
         "parameters": [
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of DocumentDto",
+            "description": "The unique identifier of DocumentDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
             "x-ms-docs-key-type": "DocumentDto"
           },
           {
-            "in": "body",
-            "name": "body",
-            "description": "New navigation property ref value",
-            "required": true,
-            "schema": {
-              "type": "object",
-              "additionalProperties": {
-                "type": "object"
-              }
-            }
+            "$ref": "#/parameters/refPostBody"
           }
         ],
         "responses": {
-          "201": {
-            "description": "Created navigation property link.",
-            "schema": {
-              "type": "object"
-            }
+          "204": {
+            "description": "Success"
+          },
+          "default": {
+            "$ref": "#/responses/error"
+          }
+        },
+        "x-ms-docs-operation-type": "operation"
+      },
+      "delete": {
+        "tags": [
+          "Documents.RevisionDto"
+        ],
+        "summary": "Delete ref of navigation property Revisions for Documents",
+        "operationId": "Documents.DeleteRefRevisions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "Id",
+            "description": "The unique identifier of DocumentDto",
+            "required": true,
+            "type": "number",
+            "format": "int32",
+            "maximum": 2147483647,
+            "minimum": -2147483648,
+            "x-ms-docs-key-type": "DocumentDto"
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "description": "ETag",
+            "type": "string"
+          },
+          {
+            "in": "query",
+            "name": "@id",
+            "description": "The delete Uri",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Success"
           },
           "default": {
             "$ref": "#/responses/error"
@@ -976,15 +1008,18 @@
     },
     "/Documents({Id})/Tags": {
       "get": {
+        "tags": [
+          "Documents.DocumentTagRelDto"
+        ],
         "summary": "Get Tags property value",
-        "operationId": "Tags.DocumentTagRelDto.ListDocumentTagRelDto",
+        "operationId": "Documents.ListTags",
         "parameters": [
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of DocumentDto",
+            "description": "The unique identifier of DocumentDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -1053,8 +1088,11 @@
         }
       },
       "patch": {
+        "tags": [
+          "Documents.DocumentTagRelDto"
+        ],
         "summary": "Update property Tags value.",
-        "operationId": "Tags.DocumentTagRelDto.UpdateDocumentTagRelDto",
+        "operationId": "Documents.UpdateTags",
         "consumes": [
           "application/json"
         ],
@@ -1062,9 +1100,9 @@
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of DocumentDto",
+            "description": "The unique identifier of DocumentDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -1076,9 +1114,14 @@
             "description": "New property values",
             "required": true,
             "schema": {
-              "type": "array",
-              "items": {
-                "$ref": "#/definitions/Siterra.Documents.App.DTO.DocumentTagRelDto"
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/Siterra.Documents.App.DTO.DocumentTagRelDto"
+                  }
+                }
               }
             }
           }
@@ -1093,8 +1136,11 @@
         }
       },
       "post": {
+        "tags": [
+          "Documents.DocumentTagRelDto"
+        ],
         "summary": "Sets a new value for the collection of DocumentTagRelDto.",
-        "operationId": "Tags.DocumentTagRelDto.SetDocumentTagRelDto",
+        "operationId": "Documents.SetTags",
         "consumes": [
           "application/json"
         ],
@@ -1102,9 +1148,9 @@
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of DocumentDto",
+            "description": "The unique identifier of DocumentDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -1141,19 +1187,28 @@
     },
     "/Documents({Id})/Tags/$count": {
       "get": {
+        "tags": [
+          "Documents.DocumentTagRelDto"
+        ],
         "summary": "Get the number of the resource",
-        "operationId": "Get.Count.Tags-ed53",
+        "operationId": "Documents.Tags.GetCount-ed53",
         "parameters": [
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of DocumentDto",
+            "description": "The unique identifier of DocumentDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
             "x-ms-docs-key-type": "DocumentDto"
+          },
+          {
+            "$ref": "#/parameters/search"
+          },
+          {
+            "$ref": "#/parameters/filter"
           }
         ],
         "responses": {
@@ -1169,8 +1224,19 @@
     },
     "/Documents/$count": {
       "get": {
+        "tags": [
+          "Documents.DocumentDto"
+        ],
         "summary": "Get the number of the resource",
-        "operationId": "Get.Count.Documents-f555",
+        "operationId": "Documents.GetCount-f555",
+        "parameters": [
+          {
+            "$ref": "#/parameters/search"
+          },
+          {
+            "$ref": "#/parameters/filter"
+          }
+        ],
         "responses": {
           "200": {
             "$ref": "#/responses/ODataCountResponse"
@@ -1348,9 +1414,9 @@
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of LibraryDto",
+            "description": "The unique identifier of LibraryDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -1423,9 +1489,9 @@
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of LibraryDto",
+            "description": "The unique identifier of LibraryDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -1461,9 +1527,9 @@
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of LibraryDto",
+            "description": "The unique identifier of LibraryDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -1499,9 +1565,9 @@
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of LibraryDto",
+            "description": "The unique identifier of LibraryDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -1607,14 +1673,14 @@
           "Libraries.DocumentDto"
         ],
         "summary": "Delete ref of navigation property Documents for Libraries",
-        "operationId": "Libraries.DeleteRefDocuments",
+        "operationId": "Libraries.documents.DeleteRefDocumentDto",
         "parameters": [
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of LibraryDto",
+            "description": "The unique identifier of LibraryDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -1623,9 +1689,9 @@
           {
             "in": "path",
             "name": "Id1",
-            "description": "key: Id of DocumentDto",
+            "description": "The unique identifier of DocumentDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -1635,12 +1701,6 @@
             "in": "header",
             "name": "If-Match",
             "description": "ETag",
-            "type": "string"
-          },
-          {
-            "in": "query",
-            "name": "@id",
-            "description": "Delete Uri",
             "type": "string"
           }
         ],
@@ -1658,15 +1718,18 @@
     },
     "/Libraries({Id})/Documents({Id1})/Tags": {
       "get": {
+        "tags": [
+          "Libraries.DocumentDto.DocumentTagRelDto"
+        ],
         "summary": "Get Tags property value",
-        "operationId": "Tags.DocumentTagRelDto.ListDocumentTagRelDto",
+        "operationId": "Libraries.Documents.ListTags",
         "parameters": [
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of LibraryDto",
+            "description": "The unique identifier of LibraryDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -1675,9 +1738,9 @@
           {
             "in": "path",
             "name": "Id1",
-            "description": "key: Id of DocumentDto",
+            "description": "The unique identifier of DocumentDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -1746,8 +1809,11 @@
         }
       },
       "patch": {
+        "tags": [
+          "Libraries.DocumentDto.DocumentTagRelDto"
+        ],
         "summary": "Update property Tags value.",
-        "operationId": "Tags.DocumentTagRelDto.UpdateDocumentTagRelDto",
+        "operationId": "Libraries.Documents.UpdateTags",
         "consumes": [
           "application/json"
         ],
@@ -1755,9 +1821,9 @@
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of LibraryDto",
+            "description": "The unique identifier of LibraryDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -1766,9 +1832,9 @@
           {
             "in": "path",
             "name": "Id1",
-            "description": "key: Id of DocumentDto",
+            "description": "The unique identifier of DocumentDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -1780,9 +1846,14 @@
             "description": "New property values",
             "required": true,
             "schema": {
-              "type": "array",
-              "items": {
-                "$ref": "#/definitions/Siterra.Documents.App.DTO.DocumentTagRelDto"
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/Siterra.Documents.App.DTO.DocumentTagRelDto"
+                  }
+                }
               }
             }
           }
@@ -1797,8 +1868,11 @@
         }
       },
       "post": {
+        "tags": [
+          "Libraries.DocumentDto.DocumentTagRelDto"
+        ],
         "summary": "Sets a new value for the collection of DocumentTagRelDto.",
-        "operationId": "Tags.DocumentTagRelDto.SetDocumentTagRelDto",
+        "operationId": "Libraries.Documents.SetTags",
         "consumes": [
           "application/json"
         ],
@@ -1806,9 +1880,9 @@
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of LibraryDto",
+            "description": "The unique identifier of LibraryDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -1817,9 +1891,9 @@
           {
             "in": "path",
             "name": "Id1",
-            "description": "key: Id of DocumentDto",
+            "description": "The unique identifier of DocumentDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -1856,15 +1930,18 @@
     },
     "/Libraries({Id})/Documents({Id1})/Tags/$count": {
       "get": {
+        "tags": [
+          "Libraries.DocumentDto.DocumentTagRelDto"
+        ],
         "summary": "Get the number of the resource",
-        "operationId": "Get.Count.Tags-2853",
+        "operationId": "Libraries.Documents.Tags.GetCount-2853",
         "parameters": [
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of LibraryDto",
+            "description": "The unique identifier of LibraryDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -1873,13 +1950,19 @@
           {
             "in": "path",
             "name": "Id1",
-            "description": "key: Id of DocumentDto",
+            "description": "The unique identifier of DocumentDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
             "x-ms-docs-key-type": "DocumentDto"
+          },
+          {
+            "$ref": "#/parameters/search"
+          },
+          {
+            "$ref": "#/parameters/filter"
           }
         ],
         "responses": {
@@ -1895,19 +1978,28 @@
     },
     "/Libraries({Id})/Documents/$count": {
       "get": {
+        "tags": [
+          "Libraries.DocumentDto"
+        ],
         "summary": "Get the number of the resource",
-        "operationId": "Get.Count.Documents-34c7",
+        "operationId": "Libraries.Documents.GetCount-34c7",
         "parameters": [
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of LibraryDto",
+            "description": "The unique identifier of LibraryDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
             "x-ms-docs-key-type": "LibraryDto"
+          },
+          {
+            "$ref": "#/parameters/search"
+          },
+          {
+            "$ref": "#/parameters/filter"
           }
         ],
         "responses": {
@@ -1932,9 +2024,9 @@
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of LibraryDto",
+            "description": "The unique identifier of LibraryDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -2003,43 +2095,67 @@
         ],
         "summary": "Create new navigation property ref to Documents for Libraries",
         "operationId": "Libraries.CreateRefDocuments",
-        "consumes": [
-          "application/json"
-        ],
-        "produces": [
-          "application/json"
-        ],
         "parameters": [
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of LibraryDto",
+            "description": "The unique identifier of LibraryDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
             "x-ms-docs-key-type": "LibraryDto"
           },
           {
-            "in": "body",
-            "name": "body",
-            "description": "New navigation property ref value",
-            "required": true,
-            "schema": {
-              "type": "object",
-              "additionalProperties": {
-                "type": "object"
-              }
-            }
+            "$ref": "#/parameters/refPostBody"
           }
         ],
         "responses": {
-          "201": {
-            "description": "Created navigation property link.",
-            "schema": {
-              "type": "object"
-            }
+          "204": {
+            "description": "Success"
+          },
+          "default": {
+            "$ref": "#/responses/error"
+          }
+        },
+        "x-ms-docs-operation-type": "operation"
+      },
+      "delete": {
+        "tags": [
+          "Libraries.DocumentDto"
+        ],
+        "summary": "Delete ref of navigation property Documents for Libraries",
+        "operationId": "Libraries.DeleteRefDocuments",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "Id",
+            "description": "The unique identifier of LibraryDto",
+            "required": true,
+            "type": "number",
+            "format": "int32",
+            "maximum": 2147483647,
+            "minimum": -2147483648,
+            "x-ms-docs-key-type": "LibraryDto"
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "description": "ETag",
+            "type": "string"
+          },
+          {
+            "in": "query",
+            "name": "@id",
+            "description": "The delete Uri",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Success"
           },
           "default": {
             "$ref": "#/responses/error"
@@ -2051,8 +2167,19 @@
     },
     "/Libraries/$count": {
       "get": {
+        "tags": [
+          "Libraries.LibraryDto"
+        ],
         "summary": "Get the number of the resource",
-        "operationId": "Get.Count.Libraries-e13e",
+        "operationId": "Libraries.GetCount-e13e",
+        "parameters": [
+          {
+            "$ref": "#/parameters/search"
+          },
+          {
+            "$ref": "#/parameters/filter"
+          }
+        ],
         "responses": {
           "200": {
             "$ref": "#/responses/ODataCountResponse"
@@ -2236,9 +2363,9 @@
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of RevisionDto",
+            "description": "The unique identifier of RevisionDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -2313,9 +2440,9 @@
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of RevisionDto",
+            "description": "The unique identifier of RevisionDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -2351,9 +2478,9 @@
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of RevisionDto",
+            "description": "The unique identifier of RevisionDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -2392,9 +2519,9 @@
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of RevisionDto",
+            "description": "The unique identifier of RevisionDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -2509,9 +2636,9 @@
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of RevisionDto",
+            "description": "The unique identifier of RevisionDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -2537,29 +2664,20 @@
         ],
         "summary": "Update the ref of navigation property Document in Revisions",
         "operationId": "Revisions.UpdateRefDocument",
-        "consumes": [
-          "application/json"
-        ],
         "parameters": [
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of RevisionDto",
+            "description": "The unique identifier of RevisionDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
             "x-ms-docs-key-type": "RevisionDto"
           },
           {
-            "in": "body",
-            "name": "body",
-            "description": "New navigation property ref values",
-            "required": true,
-            "schema": {
-              "$ref": "#/definitions/ReferenceUpdateSchema"
-            }
+            "$ref": "#/parameters/refPutBody"
           }
         ],
         "responses": {
@@ -2582,9 +2700,9 @@
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of RevisionDto",
+            "description": "The unique identifier of RevisionDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -2611,15 +2729,18 @@
     },
     "/Revisions({Id})/Document/DocumentClasses": {
       "get": {
+        "tags": [
+          "Revisions.Document.DocumentClass"
+        ],
         "summary": "Get DocumentClasses property value",
-        "operationId": "DocumentClasses.DocumentClass.ListDocumentClass",
+        "operationId": "Revisions.Document.ListDocumentClasses",
         "parameters": [
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of RevisionDto",
+            "description": "The unique identifier of RevisionDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -2711,8 +2832,11 @@
         }
       },
       "patch": {
+        "tags": [
+          "Revisions.Document.DocumentClass"
+        ],
         "summary": "Update property DocumentClasses value.",
-        "operationId": "DocumentClasses.DocumentClass.UpdateDocumentClass",
+        "operationId": "Revisions.Document.UpdateDocumentClasses",
         "consumes": [
           "application/json"
         ],
@@ -2720,9 +2844,9 @@
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of RevisionDto",
+            "description": "The unique identifier of RevisionDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -2734,9 +2858,14 @@
             "description": "New property values",
             "required": true,
             "schema": {
-              "type": "array",
-              "items": {
-                "$ref": "#/definitions/Siterra.Documents.BusinessLogic.Entities.Document.DocumentClass"
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/Siterra.Documents.BusinessLogic.Entities.Document.DocumentClass"
+                  }
+                }
               }
             }
           }
@@ -2751,8 +2880,11 @@
         }
       },
       "post": {
+        "tags": [
+          "Revisions.Document.DocumentClass"
+        ],
         "summary": "Sets a new value for the collection of DocumentClass.",
-        "operationId": "DocumentClasses.DocumentClass.SetDocumentClass",
+        "operationId": "Revisions.Document.SetDocumentClasses",
         "consumes": [
           "application/json"
         ],
@@ -2760,9 +2892,9 @@
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of RevisionDto",
+            "description": "The unique identifier of RevisionDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -2799,19 +2931,28 @@
     },
     "/Revisions({Id})/Document/DocumentClasses/$count": {
       "get": {
+        "tags": [
+          "Revisions.Document.DocumentClass"
+        ],
         "summary": "Get the number of the resource",
-        "operationId": "Get.Count.DocumentClasses-6342",
+        "operationId": "Revisions.Document.DocumentClasses.GetCount-6342",
         "parameters": [
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of RevisionDto",
+            "description": "The unique identifier of RevisionDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
             "x-ms-docs-key-type": "RevisionDto"
+          },
+          {
+            "$ref": "#/parameters/search"
+          },
+          {
+            "$ref": "#/parameters/filter"
           }
         ],
         "responses": {
@@ -2827,15 +2968,18 @@
     },
     "/Revisions({Id})/Document/Tags": {
       "get": {
+        "tags": [
+          "Revisions.Document.DocumentTagRel"
+        ],
         "summary": "Get Tags property value",
-        "operationId": "Tags.DocumentTagRel.ListDocumentTagRel",
+        "operationId": "Revisions.Document.ListTags",
         "parameters": [
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of RevisionDto",
+            "description": "The unique identifier of RevisionDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -2926,8 +3070,11 @@
         }
       },
       "patch": {
+        "tags": [
+          "Revisions.Document.DocumentTagRel"
+        ],
         "summary": "Update property Tags value.",
-        "operationId": "Tags.DocumentTagRel.UpdateDocumentTagRel",
+        "operationId": "Revisions.Document.UpdateTags",
         "consumes": [
           "application/json"
         ],
@@ -2935,9 +3082,9 @@
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of RevisionDto",
+            "description": "The unique identifier of RevisionDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -2949,9 +3096,14 @@
             "description": "New property values",
             "required": true,
             "schema": {
-              "type": "array",
-              "items": {
-                "$ref": "#/definitions/Siterra.Documents.BusinessLogic.Entities.Document.DocumentTagRel"
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/Siterra.Documents.BusinessLogic.Entities.Document.DocumentTagRel"
+                  }
+                }
               }
             }
           }
@@ -2966,8 +3118,11 @@
         }
       },
       "post": {
+        "tags": [
+          "Revisions.Document.DocumentTagRel"
+        ],
         "summary": "Sets a new value for the collection of DocumentTagRel.",
-        "operationId": "Tags.DocumentTagRel.SetDocumentTagRel",
+        "operationId": "Revisions.Document.SetTags",
         "consumes": [
           "application/json"
         ],
@@ -2975,9 +3130,9 @@
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of RevisionDto",
+            "description": "The unique identifier of RevisionDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -3014,19 +3169,28 @@
     },
     "/Revisions({Id})/Document/Tags/$count": {
       "get": {
+        "tags": [
+          "Revisions.Document.DocumentTagRel"
+        ],
         "summary": "Get the number of the resource",
-        "operationId": "Get.Count.Tags-161f",
+        "operationId": "Revisions.Document.Tags.GetCount-161f",
         "parameters": [
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of RevisionDto",
+            "description": "The unique identifier of RevisionDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
             "x-ms-docs-key-type": "RevisionDto"
+          },
+          {
+            "$ref": "#/parameters/search"
+          },
+          {
+            "$ref": "#/parameters/filter"
           }
         ],
         "responses": {
@@ -3042,8 +3206,19 @@
     },
     "/Revisions/$count": {
       "get": {
+        "tags": [
+          "Revisions.RevisionDto"
+        ],
         "summary": "Get the number of the resource",
-        "operationId": "Get.Count.Revisions-c6a5",
+        "operationId": "Revisions.GetCount-c6a5",
+        "parameters": [
+          {
+            "$ref": "#/parameters/search"
+          },
+          {
+            "$ref": "#/parameters/filter"
+          }
+        ],
         "responses": {
           "200": {
             "$ref": "#/responses/ODataCountResponse"
@@ -3206,9 +3381,9 @@
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of DocumentDto",
+            "description": "The unique identifier of DocumentDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -3276,9 +3451,9 @@
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of DocumentDto",
+            "description": "The unique identifier of DocumentDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -3314,9 +3489,9 @@
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of DocumentDto",
+            "description": "The unique identifier of DocumentDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -3344,20 +3519,17 @@
     "/Tasks({Id})/Default.Upload": {
       "post": {
         "tags": [
-          "Tasks.Actions"
+          "Tasks.DocumentDto"
         ],
         "summary": "Invoke action Upload",
         "operationId": "Tasks.DocumentDto.Upload",
-        "produces": [
-          "application/json"
-        ],
         "parameters": [
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of DocumentDto",
+            "description": "The unique identifier of DocumentDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -3366,10 +3538,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/Siterra.Documents.App.DTO.DocumentDto"
-            }
+            "$ref": "#/responses/UploadResponse"
           },
           "default": {
             "$ref": "#/responses/error"
@@ -3390,9 +3559,9 @@
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of DocumentDto",
+            "description": "The unique identifier of DocumentDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -3519,14 +3688,14 @@
           "Tasks.RevisionDto"
         ],
         "summary": "Delete ref of navigation property Revisions for Tasks",
-        "operationId": "Tasks.DeleteRefRevisions",
+        "operationId": "Tasks.revisions.DeleteRefRevisionDto",
         "parameters": [
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of DocumentDto",
+            "description": "The unique identifier of DocumentDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -3535,9 +3704,9 @@
           {
             "in": "path",
             "name": "Id1",
-            "description": "key: Id of RevisionDto",
+            "description": "The unique identifier of RevisionDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -3547,12 +3716,6 @@
             "in": "header",
             "name": "If-Match",
             "description": "ETag",
-            "type": "string"
-          },
-          {
-            "in": "query",
-            "name": "@id",
-            "description": "Delete Uri",
             "type": "string"
           }
         ],
@@ -3570,19 +3733,28 @@
     },
     "/Tasks({Id})/Revisions/$count": {
       "get": {
+        "tags": [
+          "Tasks.RevisionDto"
+        ],
         "summary": "Get the number of the resource",
-        "operationId": "Get.Count.Revisions-9297",
+        "operationId": "Tasks.Revisions.GetCount-9297",
         "parameters": [
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of DocumentDto",
+            "description": "The unique identifier of DocumentDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
             "x-ms-docs-key-type": "DocumentDto"
+          },
+          {
+            "$ref": "#/parameters/search"
+          },
+          {
+            "$ref": "#/parameters/filter"
           }
         ],
         "responses": {
@@ -3607,9 +3779,9 @@
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of DocumentDto",
+            "description": "The unique identifier of DocumentDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -3692,43 +3864,67 @@
         ],
         "summary": "Create new navigation property ref to Revisions for Tasks",
         "operationId": "Tasks.CreateRefRevisions",
-        "consumes": [
-          "application/json"
-        ],
-        "produces": [
-          "application/json"
-        ],
         "parameters": [
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of DocumentDto",
+            "description": "The unique identifier of DocumentDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
             "x-ms-docs-key-type": "DocumentDto"
           },
           {
-            "in": "body",
-            "name": "body",
-            "description": "New navigation property ref value",
-            "required": true,
-            "schema": {
-              "type": "object",
-              "additionalProperties": {
-                "type": "object"
-              }
-            }
+            "$ref": "#/parameters/refPostBody"
           }
         ],
         "responses": {
-          "201": {
-            "description": "Created navigation property link.",
-            "schema": {
-              "type": "object"
-            }
+          "204": {
+            "description": "Success"
+          },
+          "default": {
+            "$ref": "#/responses/error"
+          }
+        },
+        "x-ms-docs-operation-type": "operation"
+      },
+      "delete": {
+        "tags": [
+          "Tasks.RevisionDto"
+        ],
+        "summary": "Delete ref of navigation property Revisions for Tasks",
+        "operationId": "Tasks.DeleteRefRevisions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "Id",
+            "description": "The unique identifier of DocumentDto",
+            "required": true,
+            "type": "number",
+            "format": "int32",
+            "maximum": 2147483647,
+            "minimum": -2147483648,
+            "x-ms-docs-key-type": "DocumentDto"
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "description": "ETag",
+            "type": "string"
+          },
+          {
+            "in": "query",
+            "name": "@id",
+            "description": "The delete Uri",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Success"
           },
           "default": {
             "$ref": "#/responses/error"
@@ -3740,15 +3936,18 @@
     },
     "/Tasks({Id})/Tags": {
       "get": {
+        "tags": [
+          "Tasks.DocumentTagRelDto"
+        ],
         "summary": "Get Tags property value",
-        "operationId": "Tags.DocumentTagRelDto.ListDocumentTagRelDto",
+        "operationId": "Tasks.ListTags",
         "parameters": [
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of DocumentDto",
+            "description": "The unique identifier of DocumentDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -3817,8 +4016,11 @@
         }
       },
       "patch": {
+        "tags": [
+          "Tasks.DocumentTagRelDto"
+        ],
         "summary": "Update property Tags value.",
-        "operationId": "Tags.DocumentTagRelDto.UpdateDocumentTagRelDto",
+        "operationId": "Tasks.UpdateTags",
         "consumes": [
           "application/json"
         ],
@@ -3826,9 +4028,9 @@
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of DocumentDto",
+            "description": "The unique identifier of DocumentDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -3840,9 +4042,14 @@
             "description": "New property values",
             "required": true,
             "schema": {
-              "type": "array",
-              "items": {
-                "$ref": "#/definitions/Siterra.Documents.App.DTO.DocumentTagRelDto"
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/Siterra.Documents.App.DTO.DocumentTagRelDto"
+                  }
+                }
               }
             }
           }
@@ -3857,8 +4064,11 @@
         }
       },
       "post": {
+        "tags": [
+          "Tasks.DocumentTagRelDto"
+        ],
         "summary": "Sets a new value for the collection of DocumentTagRelDto.",
-        "operationId": "Tags.DocumentTagRelDto.SetDocumentTagRelDto",
+        "operationId": "Tasks.SetTags",
         "consumes": [
           "application/json"
         ],
@@ -3866,9 +4076,9 @@
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of DocumentDto",
+            "description": "The unique identifier of DocumentDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
@@ -3905,19 +4115,28 @@
     },
     "/Tasks({Id})/Tags/$count": {
       "get": {
+        "tags": [
+          "Tasks.DocumentTagRelDto"
+        ],
         "summary": "Get the number of the resource",
-        "operationId": "Get.Count.Tags-3a1b",
+        "operationId": "Tasks.Tags.GetCount-3a1b",
         "parameters": [
           {
             "in": "path",
             "name": "Id",
-            "description": "key: Id of DocumentDto",
+            "description": "The unique identifier of DocumentDto",
             "required": true,
-            "type": "integer",
+            "type": "number",
             "format": "int32",
             "maximum": 2147483647,
             "minimum": -2147483648,
             "x-ms-docs-key-type": "DocumentDto"
+          },
+          {
+            "$ref": "#/parameters/search"
+          },
+          {
+            "$ref": "#/parameters/filter"
           }
         ],
         "responses": {
@@ -3933,8 +4152,19 @@
     },
     "/Tasks/$count": {
       "get": {
+        "tags": [
+          "Tasks.DocumentDto"
+        ],
         "summary": "Get the number of the resource",
-        "operationId": "Get.Count.Tasks-2961",
+        "operationId": "Tasks.GetCount-2961",
+        "parameters": [
+          {
+            "$ref": "#/parameters/search"
+          },
+          {
+            "$ref": "#/parameters/filter"
+          }
+        ],
         "responses": {
           "200": {
             "$ref": "#/responses/ODataCountResponse"
@@ -3956,7 +4186,7 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "Name": {
           "type": "string"
@@ -3977,7 +4207,7 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "ModificationDate": {
           "format": "date-time",
@@ -3988,7 +4218,7 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "Tags": {
           "type": "array",
@@ -4000,19 +4230,20 @@
           "type": "array",
           "items": {
             "$ref": "#/definitions/Siterra.Documents.App.DTO.RevisionDto"
-          }
+          },
+          "x-ms-navigationProperty": true
         }
       },
       "example": {
-        "Id": "integer (identifier)",
+        "Id": "number (identifier)",
         "Name": "string",
         "Description": "string",
         "Filename": "string",
         "NumberOfRevisions": "string",
         "Suffix": "string",
-        "DomainId": "integer",
+        "DomainId": "number",
         "ModificationDate": "string (timestamp)",
-        "ModifiedBy": "integer",
+        "ModifiedBy": "number",
         "Tags": [
           {
             "@odata.type": "Siterra.Documents.App.DTO.DocumentTagRelDto"
@@ -4033,7 +4264,7 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "Name": {
           "type": "string"
@@ -4048,19 +4279,19 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "ParentTypeId": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "ParentId": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "AllowMultiple": {
           "type": "boolean"
@@ -4072,19 +4303,19 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "DomainId": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "CreatedBy": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "CreationDate": {
           "format": "date-time",
@@ -4095,7 +4326,7 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "ModificationDate": {
           "format": "date-time",
@@ -4106,24 +4337,25 @@
           "type": "array",
           "items": {
             "$ref": "#/definitions/Siterra.Documents.App.DTO.DocumentDto"
-          }
+          },
+          "x-ms-navigationProperty": true
         }
       },
       "example": {
-        "Id": "integer (identifier)",
+        "Id": "number (identifier)",
         "Name": "string",
         "Number": "string",
         "Description": "string",
-        "LibraryTemplateId": "integer",
-        "ParentTypeId": "integer",
-        "ParentId": "integer",
+        "LibraryTemplateId": "number",
+        "ParentTypeId": "number",
+        "ParentId": "number",
         "AllowMultiple": true,
         "AutoCreate": true,
-        "TypeId": "integer",
-        "DomainId": "integer",
-        "CreatedBy": "integer",
+        "TypeId": "number",
+        "DomainId": "number",
+        "CreatedBy": "number",
         "CreationDate": "string (timestamp)",
-        "ModifiedBy": "integer",
+        "ModifiedBy": "number",
         "ModificationDate": "string (timestamp)",
         "Documents": [
           {
@@ -4140,19 +4372,19 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "Number": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "DocumentId": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "DocumentName": {
           "type": "string"
@@ -4169,7 +4401,7 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "IsReviewed": {
           "type": "boolean"
@@ -4178,7 +4410,7 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "ReviewedDate": {
           "format": "date-time",
@@ -4192,7 +4424,7 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "ApprovedDate": {
           "format": "date-time",
@@ -4206,7 +4438,7 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "RejectedDate": {
           "format": "date-time",
@@ -4217,30 +4449,30 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "Document": {
           "$ref": "#/definitions/Siterra.Documents.BusinessLogic.Entities.Document.Document"
         }
       },
       "example": {
-        "Id": "integer (identifier)",
-        "Number": "integer",
-        "DocumentId": "integer",
+        "Id": "number (identifier)",
+        "Number": "number",
+        "DocumentId": "number",
         "DocumentName": "string",
         "DocumentDescription": "string",
         "CreationDate": "string (timestamp)",
-        "CreatedBy": "integer",
+        "CreatedBy": "number",
         "IsReviewed": true,
-        "ReviewedBy": "integer",
+        "ReviewedBy": "number",
         "ReviewedDate": "string (timestamp)",
         "IsApproved": true,
-        "ApprovedBy": "integer",
+        "ApprovedBy": "number",
         "ApprovedDate": "string (timestamp)",
         "IsRejected": true,
-        "RejectedBy": "integer",
+        "RejectedBy": "number",
         "RejectedDate": "string (timestamp)",
-        "DomainId": "integer",
+        "DomainId": "number",
         "Document": {
           "@odata.type": "Siterra.Documents.BusinessLogic.Entities.Document.Document"
         }
@@ -4254,7 +4486,7 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "Name": {
           "type": "string"
@@ -4276,16 +4508,16 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         }
       },
       "example": {
-        "Id": "integer (identifier)",
+        "Id": "number (identifier)",
         "Name": "string",
         "Description": "string",
         "CreationDate": "string (timestamp)",
         "ModificationDate": "string (timestamp)",
-        "DomainId": "integer"
+        "DomainId": "number"
       }
     },
     "Siterra.Documents.App.DTO.DocumentTagRelDto": {
@@ -4308,7 +4540,7 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "Name": {
           "type": "string"
@@ -4320,13 +4552,13 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "TypeId": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "Keywords": {
           "type": "string"
@@ -4340,7 +4572,7 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "ModificationDate": {
           "format": "date-time",
@@ -4351,25 +4583,25 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "DomainId": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "LibraryId": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "OwnerUserId": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "StatusDate": {
           "format": "date-time",
@@ -4380,7 +4612,7 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "CheckoutDate": {
           "format": "date-time",
@@ -4394,7 +4626,7 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "Number": {
           "type": "string"
@@ -4406,7 +4638,6 @@
         },
         "FileSized": {
           "format": "decimal",
-          "multipleOf": 1,
           "type": "number"
         },
         "FileClientPath": {
@@ -4416,27 +4647,24 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "IsDeleted": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "IsNa": {
           "format": "decimal",
-          "multipleOf": 1,
           "type": "number"
         },
         "IsRejected": {
           "format": "decimal",
-          "multipleOf": 1,
           "type": "number"
         },
         "IsReviewed": {
           "format": "decimal",
-          "multipleOf": 1,
           "type": "number"
         },
         "NaDescription": {
@@ -4458,13 +4686,13 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "ScraperMapId": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "LastDownloadedDate": {
           "format": "date-time",
@@ -4475,13 +4703,13 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "IsApprovedOld": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "Suffix": {
           "type": "string"
@@ -4490,30 +4718,29 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "IsApproved": {
           "format": "decimal",
-          "multipleOf": 1,
           "type": "number"
         },
         "CategoryId": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "SectionId": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "VersionCount": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "LastFileName": {
           "type": "string"
@@ -4543,40 +4770,42 @@
           "type": "array",
           "items": {
             "$ref": "#/definitions/Siterra.Documents.BusinessLogic.Entities.Document.Document"
-          }
+          },
+          "x-ms-navigationProperty": true
         },
         "Revisions": {
           "type": "array",
           "items": {
             "$ref": "#/definitions/Siterra.Documents.BusinessLogic.Entities.Revision.Revision"
-          }
+          },
+          "x-ms-navigationProperty": true
         }
       },
       "example": {
-        "Id": "integer (identifier)",
+        "Id": "number (identifier)",
         "Name": "string",
         "Description": "string",
-        "StatusId": "integer",
-        "TypeId": "integer",
+        "StatusId": "number",
+        "TypeId": "number",
         "Keywords": "string",
         "CreationDate": "string (timestamp)",
-        "CreatedBy": "integer",
+        "CreatedBy": "number",
         "ModificationDate": "string (timestamp)",
-        "ModifiedBy": "integer",
-        "DomainId": "integer",
-        "LibraryId": "integer",
-        "OwnerUserId": "integer",
+        "ModifiedBy": "number",
+        "DomainId": "number",
+        "LibraryId": "number",
+        "OwnerUserId": "number",
         "StatusDate": "string (timestamp)",
-        "LastRevisionId": "integer",
+        "LastRevisionId": "number",
         "CheckoutDate": "string (timestamp)",
         "CheckoutPath": "string",
-        "CheckoutUserId": "integer",
+        "CheckoutUserId": "number",
         "Number": "string",
         "OriginalDate": "string (timestamp)",
         "FileSized": "number",
         "FileClientPath": "string",
-        "LastRevisionFileId": "integer",
-        "IsDeleted": "integer",
+        "LastRevisionFileId": "number",
+        "IsDeleted": "number",
         "IsNa": "number",
         "IsRejected": "number",
         "IsReviewed": "number",
@@ -4585,17 +4814,17 @@
         "RejectedDescription": "string",
         "RejectedReason": "string",
         "ReviewDescription": "string",
-        "SourceDocumentId": "integer",
-        "ScraperMapId": "integer",
+        "SourceDocumentId": "number",
+        "ScraperMapId": "number",
         "LastDownloadedDate": "string (timestamp)",
-        "SmsId": "integer",
-        "IsApprovedOld": "integer",
+        "SmsId": "number",
+        "IsApprovedOld": "number",
         "Suffix": "string",
-        "ScrapeResultId": "integer",
+        "ScrapeResultId": "number",
         "IsApproved": "number",
-        "CategoryId": "integer",
-        "SectionId": "integer",
-        "VersionCount": "integer",
+        "CategoryId": "number",
+        "SectionId": "number",
+        "VersionCount": "number",
         "LastFileName": "string",
         "DocumentClasses": [
           {
@@ -4636,25 +4865,25 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "ClassId": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "DocumentId": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "CreatedBy": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "CreationDate": {
           "format": "date-time",
@@ -4665,7 +4894,7 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "ModificationDate": {
           "format": "date-time",
@@ -4680,12 +4909,12 @@
         }
       },
       "example": {
-        "ClassInstance": "integer",
-        "ClassId": "integer",
-        "DocumentId": "integer",
-        "CreatedBy": "integer",
+        "ClassInstance": "number",
+        "ClassId": "number",
+        "DocumentId": "number",
+        "CreatedBy": "number",
         "CreationDate": "string (timestamp)",
-        "ModifiedBy": "integer",
+        "ModifiedBy": "number",
         "ModificationDate": "string (timestamp)",
         "IsPrimary": true,
         "Document": {
@@ -4701,31 +4930,31 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "TagId": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "DomainId": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "CreatedBy": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "ModifiedBy": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "CreationDate": {
           "format": "date-time",
@@ -4745,11 +4974,11 @@
         }
       },
       "example": {
-        "DocumentId": "integer",
-        "TagId": "integer",
-        "DomainId": "integer",
-        "CreatedBy": "integer",
-        "ModifiedBy": "integer",
+        "DocumentId": "number",
+        "TagId": "number",
+        "DomainId": "number",
+        "CreatedBy": "number",
+        "ModifiedBy": "number",
         "CreationDate": "string (timestamp)",
         "ModificationDate": "string (timestamp)",
         "Document": {
@@ -4768,13 +4997,13 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "DomainId": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "Name": {
           "type": "string"
@@ -4783,7 +5012,7 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "Number": {
           "type": "string"
@@ -4792,30 +5021,29 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "OwnerUserId": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "TotalSize": {
           "format": "decimal",
-          "multipleOf": 1,
           "type": "number"
         },
         "FilesCounter": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "FoldersCounter": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "CreationDate": {
           "format": "date-time",
@@ -4831,37 +5059,37 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "CreatedBy": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "ProjectId": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "SearchRingId": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "SiteId": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "AssetId": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "AllowMultiple": {
           "type": "boolean"
@@ -4879,25 +5107,25 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "SourceFolderId": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "TemplateClassId": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "TemplateSubType": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "IsHidden": {
           "type": "boolean"
@@ -4906,61 +5134,61 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "StatusId": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "SmsId": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "ContractId": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "VendorId": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "OrganizationUnitId": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "IncidentId": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "EventId": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "ClassInstance": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "ClassId": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "LibraryParent": {
           "$ref": "#/definitions/Siterra.Documents.BusinessLogic.Entities.Library.Library"
@@ -4975,59 +5203,62 @@
           "type": "array",
           "items": {
             "$ref": "#/definitions/Siterra.Documents.BusinessLogic.Entities.Document.Document"
-          }
+          },
+          "x-ms-navigationProperty": true
         },
         "LibraryChildren": {
           "type": "array",
           "items": {
             "$ref": "#/definitions/Siterra.Documents.BusinessLogic.Entities.Library.Library"
-          }
+          },
+          "x-ms-navigationProperty": true
         },
         "SourceLibraryChildren": {
           "type": "array",
           "items": {
             "$ref": "#/definitions/Siterra.Documents.BusinessLogic.Entities.Library.Library"
-          }
+          },
+          "x-ms-navigationProperty": true
         }
       },
       "example": {
-        "Id": "integer (identifier)",
-        "DomainId": "integer",
+        "Id": "number (identifier)",
+        "DomainId": "number",
         "Name": "string",
-        "ParentFolderId": "integer",
+        "ParentFolderId": "number",
         "Number": "string",
-        "TypeId": "integer",
-        "OwnerUserId": "integer",
+        "TypeId": "number",
+        "OwnerUserId": "number",
         "TotalSize": "number",
-        "FilesCounter": "integer",
-        "FoldersCounter": "integer",
+        "FilesCounter": "number",
+        "FoldersCounter": "number",
         "CreationDate": "string (timestamp)",
         "ModificationDate": "string (timestamp)",
-        "ModifiedBy": "integer",
-        "CreatedBy": "integer",
-        "ProjectId": "integer",
-        "SearchRingId": "integer",
-        "SiteId": "integer",
-        "AssetId": "integer",
+        "ModifiedBy": "number",
+        "CreatedBy": "number",
+        "ProjectId": "number",
+        "SearchRingId": "number",
+        "SiteId": "number",
+        "AssetId": "number",
         "AllowMultiple": true,
         "AutoCreate": true,
         "Description": "string",
         "IsTemplate": true,
-        "ProgramId": "integer",
-        "SourceFolderId": "integer",
-        "TemplateClassId": "integer",
-        "TemplateSubType": "integer",
+        "ProgramId": "number",
+        "SourceFolderId": "number",
+        "TemplateClassId": "number",
+        "TemplateSubType": "number",
         "IsHidden": true,
-        "IsDeleted": "integer",
-        "StatusId": "integer",
-        "SmsId": "integer",
-        "ContractId": "integer",
-        "VendorId": "integer",
-        "OrganizationUnitId": "integer",
-        "IncidentId": "integer",
-        "EventId": "integer",
-        "ClassInstance": "integer",
-        "ClassId": "integer",
+        "IsDeleted": "number",
+        "StatusId": "number",
+        "SmsId": "number",
+        "ContractId": "number",
+        "VendorId": "number",
+        "OrganizationUnitId": "number",
+        "IncidentId": "number",
+        "EventId": "number",
+        "ClassInstance": "number",
+        "ClassId": "number",
         "LibraryParent": {
           "@odata.type": "Siterra.Documents.BusinessLogic.Entities.Library.Library"
         },
@@ -5062,7 +5293,7 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "Name": {
           "type": "string"
@@ -5071,13 +5302,13 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "CreatedBy": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "ModificationDate": {
           "format": "date-time",
@@ -5093,7 +5324,7 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "Description": {
           "type": "string"
@@ -5105,25 +5336,25 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "Number": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "ClassId": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "ParentId": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "HasChanged": {
           "type": "boolean"
@@ -5138,29 +5369,31 @@
           "type": "array",
           "items": {
             "$ref": "#/definitions/Siterra.Documents.BusinessLogic.Entities.Library.LibraryType"
-          }
+          },
+          "x-ms-navigationProperty": true
         },
         "ChildrenLibraryTypes": {
           "type": "array",
           "items": {
             "$ref": "#/definitions/Siterra.Documents.BusinessLogic.Entities.Library.LibraryType"
-          }
+          },
+          "x-ms-navigationProperty": true
         }
       },
       "example": {
-        "Id": "integer (identifier)",
+        "Id": "number (identifier)",
         "Name": "string",
-        "ModifiedBy": "integer",
-        "CreatedBy": "integer",
+        "ModifiedBy": "number",
+        "CreatedBy": "number",
         "ModificationDate": "string (timestamp)",
         "CreationDate": "string (timestamp)",
-        "DomainId": "integer",
+        "DomainId": "number",
         "Description": "string",
         "XmlName": "string",
-        "MasterId": "integer",
-        "Number": "integer",
-        "ClassId": "integer",
-        "ParentId": "integer",
+        "MasterId": "number",
+        "Number": "number",
+        "ClassId": "number",
+        "ParentId": "number",
         "HasChanged": true,
         "MasterLibraryType": {
           "@odata.type": "Siterra.Documents.BusinessLogic.Entities.Library.LibraryType"
@@ -5188,7 +5421,7 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "Name": {
           "type": "string"
@@ -5200,13 +5433,13 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "CreatedBy": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "CreationDate": {
           "format": "date-time",
@@ -5220,7 +5453,6 @@
         },
         "Sized": {
           "format": "decimal",
-          "multipleOf": 1,
           "type": "number"
         },
         "ActualName": {
@@ -5230,19 +5462,19 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "SourceClassId": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "ContentTypeId": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "ClientPath": {
           "type": "string"
@@ -5251,47 +5483,46 @@
           "format": "int16",
           "maximum": 32767,
           "minimum": -32768,
-          "type": "integer"
+          "type": "number"
         },
         "SmsId": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "Latitude": {
           "format": "decimal",
-          "multipleOf": 1,
           "type": "number"
         },
         "Longitude": {
           "format": "decimal",
-          "multipleOf": 1,
           "type": "number"
         },
         "Documents": {
           "type": "array",
           "items": {
             "$ref": "#/definitions/Siterra.Documents.BusinessLogic.Entities.Document.Document"
-          }
+          },
+          "x-ms-navigationProperty": true
         }
       },
       "example": {
-        "Id": "integer (identifier)",
+        "Id": "number (identifier)",
         "Name": "string",
         "Path": "string",
-        "ModifiedBy": "integer",
-        "CreatedBy": "integer",
+        "ModifiedBy": "number",
+        "CreatedBy": "number",
         "CreationDate": "string (timestamp)",
         "ModificationDate": "string (timestamp)",
         "Sized": "number",
         "ActualName": "string",
-        "DomainId": "integer",
-        "SourceClassId": "integer",
-        "ContentTypeId": "integer",
+        "DomainId": "number",
+        "SourceClassId": "number",
+        "ContentTypeId": "number",
         "ClientPath": "string",
-        "IsSelfHosted": "integer",
-        "SmsId": "integer",
+        "IsSelfHosted": "number",
+        "SmsId": "number",
         "Latitude": "number",
         "Longitude": "number",
         "Documents": [
@@ -5309,13 +5540,13 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "DomainId": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "Name": {
           "type": "string"
@@ -5327,13 +5558,13 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "ModifiedBy": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "CreationDate": {
           "format": "date-time",
@@ -5347,12 +5578,12 @@
         }
       },
       "example": {
-        "Id": "integer (identifier)",
-        "DomainId": "integer",
+        "Id": "number (identifier)",
+        "DomainId": "number",
         "Name": "string",
         "Description": "string",
-        "CreatedBy": "integer",
-        "ModifiedBy": "integer",
+        "CreatedBy": "number",
+        "ModifiedBy": "number",
         "CreationDate": "string (timestamp)",
         "ModificationDate": "string (timestamp)"
       }
@@ -5376,12 +5607,12 @@
         }
       ],
       "example": {
-        "Id": "integer (identifier)",
-        "DomainId": "integer",
+        "Id": "number (identifier)",
+        "DomainId": "number",
         "Name": "string",
         "Description": "string",
-        "CreatedBy": "integer",
-        "ModifiedBy": "integer",
+        "CreatedBy": "number",
+        "ModifiedBy": "number",
         "CreationDate": "string (timestamp)",
         "ModificationDate": "string (timestamp)",
         "Documents": [
@@ -5404,18 +5635,19 @@
               "type": "array",
               "items": {
                 "$ref": "#/definitions/Siterra.Documents.BusinessLogic.Entities.Document.Document"
-              }
+              },
+              "x-ms-navigationProperty": true
             }
           }
         }
       ],
       "example": {
-        "Id": "integer (identifier)",
-        "DomainId": "integer",
+        "Id": "number (identifier)",
+        "DomainId": "number",
         "Name": "string",
         "Description": "string",
-        "CreatedBy": "integer",
-        "ModifiedBy": "integer",
+        "CreatedBy": "number",
+        "ModifiedBy": "number",
         "CreationDate": "string (timestamp)",
         "ModificationDate": "string (timestamp)",
         "Documents": [
@@ -5438,18 +5670,19 @@
               "type": "array",
               "items": {
                 "$ref": "#/definitions/Siterra.Documents.BusinessLogic.Entities.Document.Document"
-              }
+              },
+              "x-ms-navigationProperty": true
             }
           }
         }
       ],
       "example": {
-        "Id": "integer (identifier)",
-        "DomainId": "integer",
+        "Id": "number (identifier)",
+        "DomainId": "number",
         "Name": "string",
         "Description": "string",
-        "CreatedBy": "integer",
-        "ModifiedBy": "integer",
+        "CreatedBy": "number",
+        "ModifiedBy": "number",
         "CreationDate": "string (timestamp)",
         "ModificationDate": "string (timestamp)",
         "Documents": [
@@ -5467,19 +5700,19 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "Number": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "DocumentId": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "ModificationDate": {
           "format": "date-time",
@@ -5495,13 +5728,13 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "CreatedBy": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "Remarks": {
           "type": "string"
@@ -5510,13 +5743,13 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "DocumentOwnerContact": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "DocumentDescription": {
           "type": "string"
@@ -5548,13 +5781,13 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "IsDeleted": {
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "IsReviewed": {
           "type": "boolean"
@@ -5566,7 +5799,7 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "IsRejected": {
           "type": "boolean"
@@ -5581,7 +5814,7 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "IsApproved": {
           "type": "boolean"
@@ -5590,7 +5823,7 @@
           "format": "int32",
           "maximum": 2147483647,
           "minimum": -2147483648,
-          "type": "integer"
+          "type": "number"
         },
         "ReviewedDate": {
           "format": "date-time",
@@ -5612,16 +5845,16 @@
         }
       },
       "example": {
-        "Id": "integer (identifier)",
-        "Number": "integer",
-        "DocumentId": "integer",
+        "Id": "number (identifier)",
+        "Number": "number",
+        "DocumentId": "number",
         "ModificationDate": "string (timestamp)",
         "CreationDate": "string (timestamp)",
-        "ModifiedBy": "integer",
-        "CreatedBy": "integer",
+        "ModifiedBy": "number",
+        "CreatedBy": "number",
         "Remarks": "string",
-        "FileId": "integer",
-        "DocumentOwnerContact": "integer",
+        "FileId": "number",
+        "DocumentOwnerContact": "number",
         "DocumentDescription": "string",
         "DocumentStatusDate": "string (timestamp)",
         "DocumentFolder": "string",
@@ -5630,17 +5863,17 @@
         "DocumentType": "string",
         "DocumentName": "string",
         "DocumentNumber": "string",
-        "DomainId": "integer",
-        "IsDeleted": "integer",
+        "DomainId": "number",
+        "IsDeleted": "number",
         "IsReviewed": true,
         "ReviewDescription": "string",
-        "ReviewedBy": "integer",
+        "ReviewedBy": "number",
         "IsRejected": true,
         "RejectedReason": "string",
         "RejectedDescription": "string",
-        "RejectedBy": "integer",
+        "RejectedBy": "number",
         "IsApproved": true,
-        "ApprovedBy": "integer",
+        "ApprovedBy": "number",
         "ReviewedDate": "string (timestamp)",
         "RejectedDate": "string (timestamp)",
         "ApprovedDate": "string (timestamp)",
@@ -5671,7 +5904,8 @@
           "type": "string"
         },
         "message": {
-          "type": "string"
+          "type": "string",
+          "x-ms-primary-error-message": true
         },
         "target": {
           "type": "string"
@@ -5682,7 +5916,7 @@
             "$ref": "#/definitions/Default.ODataErrors.ErrorDetails"
           }
         },
-        "innererror": {
+        "innerError": {
           "$ref": "#/definitions/Default.ODataErrors.InnerError"
         }
       }
@@ -5857,7 +6091,7 @@
         }
       }
     },
-    "ReferenceUpdateSchema": {
+    "ReferenceUpdate": {
       "type": "object",
       "properties": {
         "@odata.id": {
@@ -5867,6 +6101,25 @@
           "type": "string"
         }
       }
+    },
+    "ReferenceCreate": {
+      "type": "object",
+      "properties": {
+        "@odata.id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {
+        "type": "object"
+      }
+    },
+    "ReferenceNumeric": {
+      "enum": [
+        "-INF",
+        "INF",
+        "NaN"
+      ],
+      "type": "string"
     }
   },
   "parameters": {
@@ -5901,6 +6154,24 @@
       "name": "$search",
       "description": "Search items by search phrases",
       "type": "string"
+    },
+    "refPostBody": {
+      "in": "body",
+      "name": "body",
+      "description": "New navigation property ref value",
+      "required": true,
+      "schema": {
+        "$ref": "#/definitions/ReferenceCreate"
+      }
+    },
+    "refPutBody": {
+      "in": "body",
+      "name": "body",
+      "description": "New navigation property ref values",
+      "required": true,
+      "schema": {
+        "$ref": "#/definitions/ReferenceUpdate"
+      }
     }
   },
   "responses": {
@@ -5987,6 +6258,12 @@
       "schema": {
         "$ref": "#/definitions/StringCollectionResponse"
       }
+    },
+    "UploadResponse": {
+      "description": "Success",
+      "schema": {
+        "$ref": "#/definitions/Siterra.Documents.App.DTO.DocumentDto"
+      }
     }
   },
   "tags": [
@@ -5999,11 +6276,11 @@
       "x-ms-docs-toc-type": "page"
     },
     {
-      "name": "Documents.Actions",
-      "x-ms-docs-toc-type": "container"
+      "name": "Documents.RevisionDto",
+      "x-ms-docs-toc-type": "page"
     },
     {
-      "name": "Documents.RevisionDto",
+      "name": "Documents.DocumentTagRelDto",
       "x-ms-docs-toc-type": "page"
     },
     {
@@ -6015,6 +6292,10 @@
       "x-ms-docs-toc-type": "page"
     },
     {
+      "name": "Libraries.DocumentDto.DocumentTagRelDto",
+      "x-ms-docs-toc-type": "page"
+    },
+    {
       "name": "Revisions.RevisionDto",
       "x-ms-docs-toc-type": "page"
     },
@@ -6023,15 +6304,23 @@
       "x-ms-docs-toc-type": "page"
     },
     {
+      "name": "Revisions.Document.DocumentClass",
+      "x-ms-docs-toc-type": "page"
+    },
+    {
+      "name": "Revisions.Document.DocumentTagRel",
+      "x-ms-docs-toc-type": "page"
+    },
+    {
       "name": "Tasks.DocumentDto",
       "x-ms-docs-toc-type": "page"
     },
     {
-      "name": "Tasks.Actions",
-      "x-ms-docs-toc-type": "container"
+      "name": "Tasks.RevisionDto",
+      "x-ms-docs-toc-type": "page"
     },
     {
-      "name": "Tasks.RevisionDto",
+      "name": "Tasks.DocumentTagRelDto",
       "x-ms-docs-toc-type": "page"
     }
   ]

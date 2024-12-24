@@ -24,16 +24,16 @@ namespace Microsoft.OpenApi.OData.Operation
         /// <inheritdoc/>
         public override OperationType OperationType => OperationType.Get;
 
-        /// <summary>
-        /// Gets/Sets the <see cref="ReadRestrictionsType"/>
-        /// </summary>
-        private ReadRestrictionsType ReadRestrictions { get; set; }
+        private ReadRestrictionsType _readRestrictions;
 
         protected override void Initialize(ODataContext context, ODataPath path)
         {
             base.Initialize(context, path);
 
-            ReadRestrictions = Context.Model.GetRecord<ReadRestrictionsType>(Singleton, CapabilitiesConstants.ReadRestrictions);
+            _readRestrictions = Context.Model.GetRecord<ReadRestrictionsType>(TargetPath, CapabilitiesConstants.ReadRestrictions);
+            var singletonReadRestrictions = Context.Model.GetRecord<ReadRestrictionsType>(Singleton, CapabilitiesConstants.ReadRestrictions);
+            _readRestrictions?.MergePropertiesIfNull(singletonReadRestrictions);
+            _readRestrictions ??= singletonReadRestrictions;
         }
 
         /// <inheritdoc/>
@@ -41,13 +41,13 @@ namespace Microsoft.OpenApi.OData.Operation
         {
             // Summary and Descriptions
             string placeHolder = "Get " + Singleton.Name;
-            operation.Summary = ReadRestrictions?.Description ?? placeHolder;
-            operation.Description = ReadRestrictions?.LongDescription ?? Context.Model.GetDescriptionAnnotation(Singleton);
+            operation.Summary = _readRestrictions?.Description ?? placeHolder;
+            operation.Description = _readRestrictions?.LongDescription ?? Context.Model.GetDescriptionAnnotation(Singleton);
 
             // OperationId, it should be unique among all operations described in the API.
             if (Context.Settings.EnableOperationId)
             {
-                string typeName = Singleton.EntityType().Name;
+                string typeName = Singleton.EntityType.Name;
                 operation.OperationId = Singleton.Name + "." + typeName + ".Get" + Utils.UpperFirstChar(typeName);
             }
         }
@@ -80,12 +80,12 @@ namespace Microsoft.OpenApi.OData.Operation
 
             if (Context.Settings.EnableDerivedTypesReferencesForResponses)
             {
-                schema = EdmModelHelper.GetDerivedTypesReferenceSchema(Singleton.EntityType(), Context.Model);
+                schema = EdmModelHelper.GetDerivedTypesReferenceSchema(Singleton.EntityType, Context.Model);
             }
 
             if (Context.Settings.ShowLinks)
             {
-                links = Context.CreateLinks(entityType: Singleton.EntityType(), entityName: Singleton.Name,
+                links = Context.CreateLinks(entityType: Singleton.EntityType, entityName: Singleton.Name,
                         entityKind: Singleton.ContainerElementKind.ToString(), path: Path, parameters: PathParameters);
             }
 
@@ -97,7 +97,7 @@ namespace Microsoft.OpenApi.OData.Operation
                     Reference = new OpenApiReference
                     {
                         Type = ReferenceType.Schema,
-                        Id = Singleton.EntityType().FullName()
+                        Id = Singleton.EntityType.FullName()
                     }
                 };
             }
@@ -105,7 +105,7 @@ namespace Microsoft.OpenApi.OData.Operation
             operation.Responses = new OpenApiResponses
             {
                 {
-                    Constants.StatusCode200,
+                    Context.Settings.UseSuccessStatusCodeRange ? Constants.StatusCodeClass2XX : Constants.StatusCode200,
                     new OpenApiResponse
                     {
                         Description = "Retrieved entity",
@@ -132,30 +132,30 @@ namespace Microsoft.OpenApi.OData.Operation
         /// <inheritdoc/>
         protected override void SetSecurity(OpenApiOperation operation)
         {
-            if (ReadRestrictions?.Permissions == null)
+            if (_readRestrictions?.Permissions == null)
             {
                 return;
             }
 
-            operation.Security = Context.CreateSecurityRequirements(ReadRestrictions.Permissions).ToList();
+            operation.Security = Context.CreateSecurityRequirements(_readRestrictions.Permissions).ToList();
         }
 
         /// <inheritdoc/>
         protected override void AppendCustomParameters(OpenApiOperation operation)
         {
-            if (ReadRestrictions == null)
+            if (_readRestrictions == null)
             {
                 return;
             }
 
-            if (ReadRestrictions.CustomHeaders != null)
+            if (_readRestrictions.CustomHeaders != null)
             {
-                AppendCustomParameters(operation, ReadRestrictions.CustomHeaders, ParameterLocation.Header);
+                AppendCustomParameters(operation, _readRestrictions.CustomHeaders, ParameterLocation.Header);
             }
 
-            if (ReadRestrictions.CustomQueryOptions != null)
+            if (_readRestrictions.CustomQueryOptions != null)
             {
-                AppendCustomParameters(operation, ReadRestrictions.CustomQueryOptions, ParameterLocation.Query);
+                AppendCustomParameters(operation, _readRestrictions.CustomQueryOptions, ParameterLocation.Query);
             }
         }
     }

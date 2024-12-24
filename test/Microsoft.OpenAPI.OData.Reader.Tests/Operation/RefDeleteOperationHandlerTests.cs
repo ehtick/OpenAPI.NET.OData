@@ -33,7 +33,7 @@ namespace Microsoft.OpenApi.OData.Operation.Tests
             IEdmEntityType person = model.SchemaElements.OfType<IEdmEntityType>().First(c => c.Name == "Person");
             IEdmNavigationProperty navProperty = person.DeclaredNavigationProperties().First(c => c.Name == "Trips");
             ODataPath path = new ODataPath(new ODataNavigationSourceSegment(people),
-                new ODataKeySegment(people.EntityType()),
+                new ODataKeySegment(people.EntityType),
                 new ODataNavigationPropertySegment(navProperty),
                 ODataRefSegment.Instance);
 
@@ -50,6 +50,7 @@ namespace Microsoft.OpenApi.OData.Operation.Tests
 
             Assert.NotNull(operation.Parameters);
             Assert.NotEmpty(operation.Parameters);
+            Assert.Equal(3, operation.Parameters.Count);
 
             Assert.Null(operation.RequestBody);
 

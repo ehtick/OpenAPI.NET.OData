@@ -1,8 +1,9 @@
-﻿// ------------------------------------------------------------
+// ------------------------------------------------------------
 //  Copyright (c) Microsoft Corporation.  All rights reserved.
 //  Licensed under the MIT License (MIT). See LICENSE in the repo root for license information.
 // ------------------------------------------------------------
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.OData.Edm.Vocabularies;
@@ -14,17 +15,18 @@ namespace Microsoft.OpenApi.OData.Vocabulary.Capabilities
     /// <summary>
     /// Enumerates HTTP methods that can be used to update entities
     /// </summary>
+    [Flags]
     internal enum HttpMethod
     {
         /// <summary>
         /// The HTTP PATCH Method
         /// </summary>
-        PATCH,
+        PATCH = 1,
 
         /// <summary>
         /// The HTTP PUT Method
         /// </summary>
-        PUT
+        PUT = 2
     }
     /// <summary>
     /// Complex Type: Org.OData.Capabilities.V1.UpdateRestrictionsType
@@ -46,10 +48,10 @@ namespace Microsoft.OpenApi.OData.Vocabulary.Capabilities
         /// <summary>
         /// Gets the value indicating Entities can be inserted, updated, and deleted via a PATCH request with a delta payload.
         /// </summary>
-        public bool? DeltaUpdateSupported { get; private set; }
+        public bool? DeltaUpdateSupported { get; private set; }      
 
         /// <summary>
-        /// Gets the value indicating the HTTP Method (PUT or PATCH) for updating an entity. 
+        /// Gets the values indicating the HTTP Method (PUT and/or PATCH) for updating an entity. 
         /// If null, PATCH should be supported and PUT MAY be supported.
         /// </summary>
         public HttpMethod? UpdateMethod { get; private set; }
@@ -124,9 +126,27 @@ namespace Microsoft.OpenApi.OData.Vocabulary.Capabilities
         }
 
         /// <summary>
-        /// Tests whether the update method for the entity has been explicitly specified as PUT
+        /// Tests whether the update method for the target has been explicitly specified as PUT
         /// </summary>
         public bool IsUpdateMethodPut => UpdateMethod.HasValue && UpdateMethod.Value == HttpMethod.PUT;
+
+        /// <summary>
+        /// Tests whether the update method for the target has been explicitly specified as PATCH and PUT
+        /// </summary>
+        public bool IsUpdateMethodPutAndPatch => UpdateMethod.HasValue &&
+            (UpdateMethod.Value & (HttpMethod.PUT | HttpMethod.PATCH)) == (HttpMethod.PUT | HttpMethod.PATCH);
+
+        /// <summary>
+        /// Lists the media types acceptable for the request content
+        /// </summary>
+        /// <remarks>This is not an official OASIS standard property.</remarks>
+        public IList<string> RequestContentTypes { get; private set; }
+
+        /// <summary>
+        /// Lists the media types acceptable for the response content
+        /// </summary>
+        /// <remarks>This is not an official OASIS standard property.</remarks>
+        public IList<string> ResponseContentTypes { get; private set; }
 
         /// <summary>
         /// Init the <see cref="UpdateRestrictionsType"/>.
@@ -177,6 +197,54 @@ namespace Microsoft.OpenApi.OData.Vocabulary.Capabilities
 
             // LongDescription
             LongDescription = record.GetString("LongDescription");
+
+            // RequestContentTypes
+            RequestContentTypes = record.GetCollection("RequestContentTypes");
+
+            // ResponseContentTypes
+            ResponseContentTypes = record.GetCollection("ResponseContentTypes");
+        }
+
+        /// <summary>
+        /// Merges properties of the specified <see cref="UpdateRestrictionsType"/> object into this instance if they are null.
+        /// </summary>
+        /// <param name="source">The <see cref="UpdateRestrictionsType"/> object containing properties to merge.</param>
+        public void MergePropertiesIfNull(UpdateRestrictionsType source)
+        {
+            if (source == null)
+                return;
+
+            Updatable ??= source.Updatable;
+
+            Upsertable ??= source.Upsertable;
+
+            DeltaUpdateSupported ??= source.DeltaUpdateSupported;
+
+            UpdateMethod ??= source.UpdateMethod;
+
+            FilterSegmentSupported ??= source.FilterSegmentSupported;
+
+            TypecastSegmentSupported ??= source.TypecastSegmentSupported;
+
+            NonUpdatableNavigationProperties ??= source.NonUpdatableNavigationProperties;
+
+            MaxLevels ??= source.MaxLevels;
+
+            Permissions ??= source.Permissions;
+
+            QueryOptions ??= source.QueryOptions;
+
+            CustomHeaders ??= source.CustomHeaders;
+
+            CustomQueryOptions ??= source.CustomQueryOptions;
+
+            Description ??= source.Description;
+
+            LongDescription ??= source.LongDescription;
+
+            RequestContentTypes ??= source.RequestContentTypes;
+
+            ResponseContentTypes ??= source.ResponseContentTypes;
         }
     }
 }

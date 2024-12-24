@@ -5,6 +5,7 @@
 
 using Microsoft.OData.Edm;
 using Microsoft.OpenApi.Models;
+using Microsoft.OpenApi.OData.Common;
 using Microsoft.OpenApi.OData.Edm;
 using Microsoft.OpenApi.OData.Vocabulary.Capabilities;
 
@@ -26,14 +27,20 @@ namespace Microsoft.OpenApi.OData.PathItem
         /// <inheritdoc/>
         protected override void SetOperations(OpenApiPathItem item)
         {
-            ReadRestrictionsType read = Context.Model.GetRecord<ReadRestrictionsType>(EntitySet);
-            if (read == null || read.IsReadable)
+            ReadRestrictionsType readRestrictions = Context.Model.GetRecord<ReadRestrictionsType>(TargetPath, CapabilitiesConstants.ReadRestrictions);
+            ReadRestrictionsType entityReadRestrictions = Context.Model.GetRecord<ReadRestrictionsType>(EntitySet, CapabilitiesConstants.ReadRestrictions);
+            readRestrictions?.MergePropertiesIfNull(entityReadRestrictions);
+            readRestrictions ??= entityReadRestrictions;
+            if (readRestrictions?.IsReadable ?? true)
             {
                 AddOperation(item, OperationType.Get);
             }
 
-            InsertRestrictionsType insert = Context.Model.GetRecord<InsertRestrictionsType>(EntitySet);
-            if (insert == null || insert.IsInsertable)
+            InsertRestrictionsType insertRestrictions = Context.Model.GetRecord<InsertRestrictionsType>(TargetPath, CapabilitiesConstants.InsertRestrictions);
+            InsertRestrictionsType entityInsertRestrictions = Context.Model.GetRecord<InsertRestrictionsType>(EntitySet, CapabilitiesConstants.InsertRestrictions);
+            insertRestrictions?.MergePropertiesIfNull(entityInsertRestrictions);
+            insertRestrictions ??= entityInsertRestrictions;
+            if (insertRestrictions?.IsInsertable ?? true)
             {
                 AddOperation(item, OperationType.Post);
             }
@@ -52,7 +59,14 @@ namespace Microsoft.OpenApi.OData.PathItem
         protected override void SetBasicInfo(OpenApiPathItem pathItem)
         {
             base.SetBasicInfo(pathItem);
-            pathItem.Description = $"Provides operations to manage the collection of {EntitySet.EntityType().Name} entities.";
+            pathItem.Description = $"Provides operations to manage the collection of {EntitySet.EntityType.Name} entities.";
+        }
+
+        /// <inheritdoc/>
+        protected override void SetExtensions(OpenApiPathItem pathItem)
+        {
+            base.SetExtensions(pathItem);
+            pathItem.Extensions.AddCustomAttributesToExtensions(Context, EntitySet);            
         }
     }
 }

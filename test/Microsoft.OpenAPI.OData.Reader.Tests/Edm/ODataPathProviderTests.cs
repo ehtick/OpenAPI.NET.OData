@@ -40,15 +40,63 @@ namespace Microsoft.OpenApi.OData.Edm.Tests
         {
             // Arrange
             IEdmModel model = EdmModelHelper.GraphBetaModel;
-            var settings = new OpenApiConvertSettings();
-            ODataPathProvider provider = new ODataPathProvider();
+            ODataPathProvider provider = new();
+            OpenApiConvertSettings settings = new()
+            {
+                AddAlternateKeyPaths = true,
+                PrefixEntityTypeNameBeforeKey = true
+            };
 
             // Act
             var paths = provider.GetPaths(model, settings);
 
             // Assert
             Assert.NotNull(paths);
-            Assert.Equal(12261, paths.Count());
+            Assert.Equal(15210, paths.Count());
+            AssertGraphBetaModelPaths(paths);
+        }
+
+        private void AssertGraphBetaModelPaths(IEnumerable<ODataPath> paths)
+        {
+            // Test that $count and microsoft.graph.count() segments are not both created for the same path.
+            Assert.Null(paths.FirstOrDefault(p => p.GetPathItemName().Equals("/drives({id})/items({id1})/workbook/tables/$count")));
+            Assert.NotNull(paths.FirstOrDefault(p => p.GetPathItemName().Equals("/drives({id})/items({id1})/workbook/tables/microsoft.graph.count()")));
+
+            // Test that $value segments are created for entity types with base types with HasStream="true"
+            Assert.NotNull(paths.FirstOrDefault(p => p.GetPathItemName().Equals("/me/chats({id})/messages({id1})/hostedContents({id2})/$value")));
+
+            // Test that count restrictions annotations for navigation properties work
+            Assert.Null(paths.FirstOrDefault(p => p.GetPathItemName().Equals("/me/drives/$count")));
+
+            // Test that navigation properties on base types are created
+            Assert.NotNull(paths.FirstOrDefault(p => p.GetPathItemName().Equals("/print/printers({id})/jobs")));
+
+            // Test that RequiresExplicitBinding and ExplicitOperationBindings annotations work
+            Assert.Null(paths.FirstOrDefault(p => p.GetPathItemName().Equals("/directory/deletedItems({id})/microsoft.graph.checkMemberGroups")));
+            Assert.Null(paths.FirstOrDefault(p => p.GetPathItemName().Equals("/directory/deletedItems({id})/microsoft.graph.checkMemberObjects")));
+            Assert.Null(paths.FirstOrDefault(p => p.GetPathItemName().Equals("/directory/deletedItems({id})/microsoft.graph.getMemberGroups")));
+            Assert.Null(paths.FirstOrDefault(p => p.GetPathItemName().Equals("/directory/deletedItems({id})/microsoft.graph.getMemberObjects")));
+            Assert.NotNull(paths.FirstOrDefault(p => p.GetPathItemName().Equals("/directory/deletedItems({id})/microsoft.graph.restore")));
+
+            Assert.NotNull(paths.FirstOrDefault(p => p.GetPathItemName().Equals("/directoryObjects({id})/microsoft.graph.checkMemberGroups")));
+            Assert.NotNull(paths.FirstOrDefault(p => p.GetPathItemName().Equals("/directoryObjects({id})/microsoft.graph.checkMemberObjects")));
+            Assert.NotNull(paths.FirstOrDefault(p => p.GetPathItemName().Equals("/directoryObjects({id})/microsoft.graph.getMemberGroups")));
+            Assert.NotNull(paths.FirstOrDefault(p => p.GetPathItemName().Equals("/directoryObjects({id})/microsoft.graph.getMemberObjects")));
+            Assert.Null(paths.FirstOrDefault(p => p.GetPathItemName().Equals("/directoryObjects({id})/microsoft.graph.restore")));
+
+            // Test that complex and navigation properties within derived types are appended
+            Assert.NotNull(paths.FirstOrDefault(p => p.GetPathItemName().Equals(
+                "/identity/authenticationEventsFlows({id})/microsoft.graph.externalUsersSelfServiceSignUpEventsFlow/onAttributeCollection/microsoft.graph.onAttributeCollectionExternalUsersSelfServiceSignUp/attributes")));
+            Assert.NotNull(paths.FirstOrDefault(p => p.GetPathItemName().Equals(
+                "/identity/authenticationEventsFlows({id})/microsoft.graph.externalUsersSelfServiceSignUpEventsFlow/onAuthenticationMethodLoadStart/microsoft.graph.onAuthenticationMethodLoadStartExternalUsersSelfServiceSignUp/identityProviders")));
+
+            // Test that navigation properties within nested complex properties are appended
+            Assert.NotNull(paths.FirstOrDefault(p => p.GetPathItemName().Equals(
+                "/identity/authenticationEventsFlows({id})/conditions/applications/includeApplications")));
+
+            // Test that alternate keys are appended for collection navigation properties
+            Assert.NotNull(paths.FirstOrDefault(p => p.GetPathItemName().Equals(
+                "/employeeExperience/learningProviders({id})/learningContents(externalId='{externalId}')")));
         }
 
         [Fact]
@@ -59,7 +107,100 @@ namespace Microsoft.OpenApi.OData.Edm.Tests
             ODataPathProvider provider = new ODataPathProvider();
             var settings = new OpenApiConvertSettings
             {
-                RequireDerivedTypesConstraintForBoundOperations = true
+                RequireDerivedTypesConstraintForBoundOperations = true,
+                AppendBoundOperationsOnDerivedTypeCastSegments = true
+            };
+
+            // Act
+            var paths = provider.GetPaths(model, settings);
+
+
+            // Assert
+            Assert.NotNull(paths);
+            Assert.Equal(15861, paths.Count());
+        }
+                
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void GetEntitySetPathsWithIndexableByKeyAnnotationWorks(bool indexable)
+        {
+            // Arrange
+            string indexableAnnotation = @"<Annotation Term=""Org.OData.Capabilities.V1.IndexableByKey"" Bool=""{0}"" />";
+            indexableAnnotation = string.Format(indexableAnnotation, indexable);
+            IEdmModel model = GetInheritanceModel(indexableAnnotation);
+            ODataPathProvider provider = new();
+            var settings = new OpenApiConvertSettings();
+
+            // Act & Assert
+            var paths = provider.GetPaths(model, settings);
+            Assert.NotNull(paths);
+
+            if (indexable)
+            {
+                Assert.Equal(3, paths.Count());
+                Assert.Contains("/Customers({ID})", paths.Select(p => p.GetPathItemName()));
+            }
+            else
+            {
+                Assert.Equal(2, paths.Count());
+                Assert.DoesNotContain("/Customers({ID})", paths.Select(p => p.GetPathItemName()));
+            }
+        }
+
+        [Theory]
+        [InlineData(true, true)]
+        [InlineData(true, false)]
+        [InlineData(false, false)]
+        public void UseCountRestrictionsAnnotationsToAppendDollarCountSegmentsToNavigationPropertyPaths(bool useCountRestrictionsAnnotation, bool countable)
+        {
+            // Arrange
+            string countRestrictionAnnotation = @"
+<Annotation Term=""Org.OData.Capabilities.V1.CountRestrictions"">
+    <Record>
+        <PropertyValue Property=""Countable"" Bool=""{0}"" />
+    </Record>
+</Annotation>";
+            countRestrictionAnnotation = string.Format(countRestrictionAnnotation, countable);
+            IEdmModel model = useCountRestrictionsAnnotation ? GetNavPropModel(countRestrictionAnnotation)
+                : GetNavPropModel(string.Empty);
+            ODataPathProvider provider = new();
+            var settings = new OpenApiConvertSettings();
+
+            // Act
+            var paths = provider.GetPaths(model, settings);
+
+            // Assert
+            Assert.NotNull(paths);
+            var testPath = paths.FirstOrDefault(p => p.GetPathItemName().Equals("/Root/Customers/$count"));
+
+            if (useCountRestrictionsAnnotation)
+            {
+                if (countable)
+                {
+                    Assert.NotNull(testPath);
+                }                    
+                else
+                {
+                    Assert.Null(testPath);
+                }                    
+            }
+            else
+            {
+                Assert.NotNull(testPath);
+            }
+        }
+
+        [Fact]
+        public void GetPathsForComposableFunctionsReturnsAllPaths()
+        {
+            // Arrange
+            IEdmModel model = EdmModelHelper.ComposableFunctionsModel;
+            ODataPathProvider provider = new ODataPathProvider();
+            var settings = new OpenApiConvertSettings
+            {
+                RequireDerivedTypesConstraintForBoundOperations = true,
+                AppendBoundOperationsOnDerivedTypeCastSegments = true
             };
 
             // Act
@@ -67,7 +208,9 @@ namespace Microsoft.OpenApi.OData.Edm.Tests
 
             // Assert
             Assert.NotNull(paths);
-            Assert.Equal(12219, paths.Count());
+            Assert.Equal(26, paths.Count());
+            Assert.Equal(17, paths.Where(p => p.LastSegment is ODataOperationSegment).Count());
+            Assert.Equal(3, paths.Where(p => p.Segments.Count > 1 && p.LastSegment is ODataNavigationPropertySegment && p.Segments[p.Segments.Count - 2] is ODataOperationSegment).Count());
         }
 
         [Fact]
@@ -77,7 +220,8 @@ namespace Microsoft.OpenApi.OData.Edm.Tests
             IEdmModel model = GetInheritanceModel(string.Empty);
             ODataPathProvider provider = new ODataPathProvider();
             var settings = new OpenApiConvertSettings {
-              EnableDollarCountPath = false,
+                EnableDollarCountPath = false,
+                AppendBoundOperationsOnDerivedTypeCastSegments = true
             };
 
             // Act
@@ -96,15 +240,26 @@ namespace Microsoft.OpenApi.OData.Edm.Tests
 </Annotation>";
 
         [Theory]
-        [InlineData(false, false, true, 3)]
-        [InlineData(false, false, false, 4)]
-        [InlineData(true, false, true, 7)]
-        [InlineData(true, false, false, 7)]
-        [InlineData(false, true, false, 5)]
-        [InlineData(false, true, true, 4)]
-        [InlineData(true, true, true, 5)]
-        [InlineData(true, true, false, 5)]
-        public void GetOperationPathsForModelWithDerivedTypesConstraint(bool addAnnotation, bool getNavPropModel, bool requireConstraint, int expectedCount)
+        [InlineData(false, false, true, true, 3)]
+        [InlineData(false, false, false, true, 4)]
+        [InlineData(false, false, false, false, 3)]
+        [InlineData(true, false, true, true, 7)]
+        [InlineData(true, false, true, false, 6)]
+        [InlineData(true, false, false, true, 7)]
+        [InlineData(true, false, false, false, 6)]
+        [InlineData(false, true, false, true, 5)]
+        [InlineData(false, true, false, false, 4)]
+        [InlineData(false, true, true, true, 4)]
+        [InlineData(true, true, true, true, 8)]
+        [InlineData(true, true, true, false, 7)]
+        [InlineData(true, true, false, true, 8)]
+        [InlineData(true, true, false, false, 7)]
+        public void GetOperationPathsForModelWithDerivedTypesConstraint(
+            bool addAnnotation,
+            bool getNavPropModel,
+            bool requireConstraint,
+            bool appendBoundOperationsOnDerivedTypes,
+            int expectedCount)
         {
             // Arrange
             var annotation = addAnnotation ? derivedTypeAnnotation : string.Empty;
@@ -112,7 +267,8 @@ namespace Microsoft.OpenApi.OData.Edm.Tests
             ODataPathProvider provider = new();
             var settings = new OpenApiConvertSettings
             {
-                RequireDerivedTypesConstraintForBoundOperations = requireConstraint
+                RequireDerivedTypesConstraintForBoundOperations = requireConstraint,
+                AppendBoundOperationsOnDerivedTypeCastSegments = appendBoundOperationsOnDerivedTypes
             };
 
             // Act
@@ -124,19 +280,29 @@ namespace Microsoft.OpenApi.OData.Edm.Tests
             var dollarCountPathsWithCastSegment = paths.Where(x => x.Kind == ODataPathKind.DollarCount && x.Any(y => y.Kind == ODataSegmentKind.TypeCast));
             if(addAnnotation && !getNavPropModel)
               Assert.Single(dollarCountPathsWithCastSegment);
-            else
-              Assert.Empty(dollarCountPathsWithCastSegment);
         }
         [Theory]
-        [InlineData(false, false, true, 4)]
-        [InlineData(false, false, false, 7)]
-        [InlineData(true, false, true, 7)]
-        [InlineData(true, false, false, 7)]
-        [InlineData(false, true, false, 5)]
-        [InlineData(false, true, true, 5)]
-        [InlineData(true, true, true, 5)]
-        [InlineData(true, true, false, 5)]
-        public void GetTypeCastPathsForModelWithDerivedTypesConstraint(bool addAnnotation, bool getNavPropModel, bool requireConstraint, int expectedCount)
+        [InlineData(false, false, true, true, 4)]
+        [InlineData(false, false, true, false, 3)]
+        [InlineData(false, false, false, true, 7)]
+        [InlineData(false, false, false, false, 6)]
+        [InlineData(true, false, true, true, 7)]
+        [InlineData(true, false, true, false, 6)]
+        [InlineData(true, false, false, true, 7)]
+        [InlineData(false, true, false, true, 8)]
+        [InlineData(false, true, false, false, 7)]
+        [InlineData(false, true, true, true, 5)]
+        [InlineData(false, true, true, false, 4)]
+        [InlineData(true, true, true, true, 8)]
+        [InlineData(true, true, true, false, 7)]
+        [InlineData(true, true, false, true, 8)]
+        [InlineData(true, true, false, false, 7)]
+        public void GetTypeCastPathsForModelWithDerivedTypesConstraint(
+            bool addAnnotation,
+            bool getNavPropModel,
+            bool requireConstraint,
+            bool appendBoundOperationsOnDerivedTypes,
+            int expectedCount)
         {
             // Arrange
             var annotation = addAnnotation ? derivedTypeAnnotation : string.Empty;
@@ -144,7 +310,8 @@ namespace Microsoft.OpenApi.OData.Edm.Tests
             ODataPathProvider provider = new();
             var settings = new OpenApiConvertSettings
             {
-                RequireDerivedTypesConstraintForODataTypeCastSegments = requireConstraint
+                RequireDerivedTypesConstraintForODataTypeCastSegments = requireConstraint,
+                AppendBoundOperationsOnDerivedTypeCastSegments = appendBoundOperationsOnDerivedTypes
             };
 
             // Act
@@ -154,7 +321,7 @@ namespace Microsoft.OpenApi.OData.Edm.Tests
             Assert.NotNull(paths);
             Assert.Equal(expectedCount, paths.Count());
             var dollarCountPathsWithCastSegment = paths.Where(x => x.Kind == ODataPathKind.DollarCount && x.Any(y => y.Kind == ODataSegmentKind.TypeCast));
-            if((addAnnotation || !requireConstraint) && !getNavPropModel)
+            if(addAnnotation || !requireConstraint)
               Assert.Single(dollarCountPathsWithCastSegment);
             else
               Assert.Empty(dollarCountPathsWithCastSegment);
@@ -590,6 +757,91 @@ namespace Microsoft.OpenApi.OData.Edm.Tests
                 Assert.DoesNotContain(TodosLogoPath, paths.Select(p => p.GetPathItemName()));
                 Assert.DoesNotContain(TodosValuePath, paths.Select(p => p.GetPathItemName()));
             }
+        }
+
+        [Fact]
+        public void GetPathsWithAlternateKeyParametersWorks()
+        {
+            string alternateKeyProperty =
+@"<Property Name=""SSN"" Type=""Edm.String""/>
+    <Annotation Term=""Org.OData.Core.V1.AlternateKeys"">
+        <Collection>
+            <Record Type=""Org.OData.Core.V1.AlternateKey"">
+                <PropertyValue Property=""Key"">
+                <Collection>
+                    <Record Type=""Org.OData.Core.V1.PropertyRef"">
+                        <PropertyValue Property=""Alias"" String=""SSN""/>
+                        <PropertyValue Property=""Name"" PropertyPath=""SSN""/>
+                    </Record>
+                </Collection>
+                </PropertyValue>
+            </Record>
+        </Collection>
+    </Annotation>";
+
+            IEdmModel model = GetEdmModel(null, null, alternateKeyProperty);
+            ODataPathProvider provider = new();
+            OpenApiConvertSettings settings = new()
+            {
+                EnableKeyAsSegment = true,
+                AddAlternateKeyPaths= true
+            };
+
+            // Act
+            IEnumerable<ODataPath> paths = provider.GetPaths(model, settings);
+
+            // Assert
+            Assert.NotNull(paths);
+            Assert.Equal(4, paths.Count());
+
+            List<string> pathItems = paths.Select(p => p.GetPathItemName(settings)).ToList();
+            Assert.Contains("/Customers/{ID}", pathItems);
+            Assert.Contains("/Customers(SSN='{SSN}')", pathItems);
+        }
+
+        [Fact]
+        public void GetPathsWithCompositeAlternateKeyParametersWorks()
+        {
+            string alternateKeyProperties =
+@"<Property Name=""UserName"" Type=""Edm.String"" Nullable=""false"" />
+    <Property Name=""AppID"" Type=""Edm.String"" Nullable=""false"" />
+    <Annotation Term=""Org.OData.Core.V1.AlternateKeys"">
+        <Collection>
+            <Record Type=""Org.OData.Core.V1.AlternateKey"">
+                <PropertyValue Property=""Key"">
+                <Collection>
+                    <Record Type=""Org.OData.Core.V1.PropertyRef"">
+                        <PropertyValue Property=""Alias"" String=""username""/>
+                        <PropertyValue Property=""Name"" PropertyPath=""UserName""/>
+                    </Record>
+                    <Record Type=""Org.OData.Core.V1.PropertyRef"">
+                        <PropertyValue Property=""Alias"" String=""appId""/>
+                        <PropertyValue Property=""Name"" PropertyPath=""AppID""/>
+                    </Record>
+                </Collection>
+                </PropertyValue>
+            </Record>
+        </Collection>
+    </Annotation>";
+
+            IEdmModel model = GetEdmModel(null, null, alternateKeyProperties);
+            ODataPathProvider provider = new();
+            OpenApiConvertSettings settings = new()
+            {
+                EnableKeyAsSegment = true,
+                AddAlternateKeyPaths = true
+            };
+
+            // Act
+            IEnumerable<ODataPath> paths = provider.GetPaths(model, settings);
+
+            // Assert
+            Assert.NotNull(paths);
+            Assert.Equal(4, paths.Count());
+
+            List<string> pathItems = paths.Select(p => p.GetPathItemName(settings)).ToList();
+            Assert.Contains("/Customers/{ID}", pathItems);
+            Assert.Contains("/Customers(username='{UserName}',appId='{AppID}')", pathItems);
         }
 
         private static IEdmModel GetEdmModel(string schemaElement, string containerElement, string propertySchema = null)

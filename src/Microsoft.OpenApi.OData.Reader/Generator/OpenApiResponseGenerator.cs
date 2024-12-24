@@ -1,4 +1,4 @@
-﻿// ------------------------------------------------------------
+// ------------------------------------------------------------
 //  Copyright (c) Microsoft Corporation.  All rights reserved.
 //  Licensed under the MIT License (MIT). See LICENSE in the repo root for license information.
 // ------------------------------------------------------------
@@ -9,6 +9,7 @@ using Microsoft.OData.Edm;
 using Microsoft.OpenApi.Models;
 using Microsoft.OpenApi.OData.Common;
 using Microsoft.OpenApi.OData.Edm;
+using Microsoft.OpenApi.OData.Vocabulary.Core;
 
 namespace Microsoft.OpenApi.OData.Generator
 {
@@ -27,19 +28,21 @@ namespace Microsoft.OpenApi.OData.Generator
                         Reference = new OpenApiReference
                         {
                             Type = ReferenceType.Response,
-                            Id = "error"
+                            Id = Constants.Error
                         }
                     }
                 },
 
-                { Constants.StatusCode204, new OpenApiResponse { Description = "Success"} },
+                { Constants.StatusCode204, new OpenApiResponse { Description = Constants.Success} },
+                { Constants.StatusCode201, new OpenApiResponse { Description = Constants.Created} },
+                { Constants.StatusCodeClass2XX, new OpenApiResponse { Description = Constants.Success} },
                 { Constants.StatusCodeClass4XX, new OpenApiResponse
                     {
                         UnresolvedReference = true,
                         Reference = new OpenApiReference
                         {
                             Type = ReferenceType.Response,
-                            Id = "error"
+                            Id = Constants.Error
                         }
                     }
                 },
@@ -49,7 +52,7 @@ namespace Microsoft.OpenApi.OData.Generator
                         Reference = new OpenApiReference
                         {
                             Type = ReferenceType.Response,
-                            Id = "error"
+                            Id = Constants.Error
                         }
                     }
                 }
@@ -107,6 +110,14 @@ namespace Microsoft.OpenApi.OData.Generator
             if(context.HasAnyNonContainedCollections())                                        
                 responses[$"String{Constants.CollectionSchemaSuffix}"] = CreateCollectionResponse("String");
 
+            foreach (IEdmOperation operation in context.Model.SchemaElements.OfType<IEdmOperation>()
+                .Where(op => context.Model.OperationTargetsMultiplePaths(op)))
+            {
+                OpenApiResponse response = context.CreateOperationResponse(operation);
+                if (response != null)
+                    responses[$"{operation.Name}Response"] = response;
+            }
+
             return responses;
         }
 
@@ -115,15 +126,13 @@ namespace Microsoft.OpenApi.OData.Generator
         /// </summary>
         /// <param name="context">The OData context.</param>
         /// <param name="operationImport">The Edm operation import.</param>
-        /// <param name="path">The OData path.</param>
         /// <returns>The created <see cref="OpenApiResponses"/>.</returns>
-        public static OpenApiResponses CreateResponses(this ODataContext context, IEdmOperationImport operationImport, ODataPath path)
+        public static OpenApiResponses CreateResponses(this ODataContext context, IEdmOperationImport operationImport)
         {
             Utils.CheckArgumentNull(context, nameof(context));
             Utils.CheckArgumentNull(operationImport, nameof(operationImport));
-            Utils.CheckArgumentNull(path, nameof(path));
 
-            return context.CreateResponses(operationImport.Operation, path);
+            return context.CreateResponses(operationImport.Operation);
         }
 
         /// <summary>
@@ -131,13 +140,11 @@ namespace Microsoft.OpenApi.OData.Generator
         /// </summary>
         /// <param name="context">The OData context.</param>
         /// <param name="operation">The Edm operation.</param>
-        /// <param name="path">The OData path.</param>
         /// <returns>The created <see cref="OpenApiResponses"/>.</returns>
-        public static OpenApiResponses CreateResponses(this ODataContext context, IEdmOperation operation, ODataPath path)
+        public static OpenApiResponses CreateResponses(this ODataContext context, IEdmOperation operation)
         {
             Utils.CheckArgumentNull(context, nameof(context));
             Utils.CheckArgumentNull(operation, nameof(operation));
-            Utils.CheckArgumentNull(path, nameof(path));
 
             OpenApiResponses responses = new();
             
@@ -145,66 +152,151 @@ namespace Microsoft.OpenApi.OData.Generator
             {
                 responses.Add(Constants.StatusCode204, Constants.StatusCode204.GetResponse());
             }
+            else if (context.Model.OperationTargetsMultiplePaths(operation))
+            {
+                responses.Add(
+                    context.Settings.UseSuccessStatusCodeRange ? Constants.StatusCodeClass2XX : Constants.StatusCode200,
+                    new OpenApiResponse
+                    {
+                        UnresolvedReference = true,
+                        Reference = new OpenApiReference()
+                        {
+                            Type = ReferenceType.Response,
+                            Id = $"{operation.Name}Response"
+                        }
+                    }
+                 );
+            }
             else
             {
-                OpenApiSchema schema;
-                if (operation.ReturnType.IsCollection())
-                {
-                    // Get the entity type of the previous segment
-                    IEdmEntityType entityType = path.Segments.Reverse().Skip(1)?.Take(1)?.FirstOrDefault()?.EntityType;
-                    schema = new OpenApiSchema
-                    {
-                        Title = entityType == null ? null : $"Collection of {entityType.Name}",
-                        Type = "object",
-                        Properties = new Dictionary<string, OpenApiSchema>
-                        {
-                            {
-                                "value", context.CreateEdmTypeSchema(operation.ReturnType)
-                            }
-                        }
-                    };
-                }
-                else if (operation.ReturnType.IsPrimitive())
-                {
-                    // A property or operation response that is of a primitive type is represented as an object with a single name/value pair,
-                    // whose name is value and whose value is a primitive value.
-                    schema = new OpenApiSchema
-                    {
-                        Type = "object",
-                        Properties = new Dictionary<string, OpenApiSchema>
-                        {
-                            {
-                                "value", context.CreateEdmTypeSchema(operation.ReturnType)
-                            }
-                        }
-                    };
-                }
-                else
-                {
-                    schema = context.CreateEdmTypeSchema(operation.ReturnType);
-                }
+                OpenApiResponse response = context.CreateOperationResponse(operation);
+                responses.Add(context.Settings.UseSuccessStatusCodeRange ? Constants.StatusCodeClass2XX : Constants.StatusCode200, response);
+            }
 
-                OpenApiResponse response = new()
+            if (context.Settings.ErrorResponsesAsDefault)
+            {
+                responses.Add(Constants.StatusCodeDefault, Constants.StatusCodeDefault.GetResponse());
+            }
+            else
+            {
+                responses.Add(Constants.StatusCodeClass4XX, Constants.StatusCodeClass4XX.GetResponse());
+                responses.Add(Constants.StatusCodeClass5XX, Constants.StatusCodeClass5XX.GetResponse());
+            }
+
+            return responses;
+        }
+
+        public static OpenApiResponse CreateOperationResponse(this ODataContext context, IEdmOperation operation)
+        {
+            if (operation.ReturnType == null)
+                return null;
+
+            OpenApiSchema schema;
+            if (operation.ReturnType.IsCollection())
+            {
+                OpenApiSchema baseSchema = new()
                 {
-                    Description = "Success",
-                    Content = new Dictionary<string, OpenApiMediaType>
+                    Type = Constants.ObjectType,
+                    Properties = new Dictionary<string, OpenApiSchema>
                     {
                         {
-                            Constants.ApplicationJsonMediaType,
-                            new OpenApiMediaType
-                            {
-                                Schema = schema
-                            }
+                            "value", context.CreateEdmTypeSchema(operation.ReturnType)
                         }
                     }
                 };
-                responses.Add(Constants.StatusCode200, response);
+
+                if (context.Settings.EnableODataAnnotationReferencesForResponses && 
+                    (operation.IsDeltaFunction() || context.Settings.EnablePagination || context.Settings.EnableCount))
+                {
+                    schema = new OpenApiSchema
+                    {
+                        AllOf = new List<OpenApiSchema>
+                        {
+                            new OpenApiSchema
+                            {
+                                UnresolvedReference = true,
+                                Reference = new OpenApiReference
+                                {
+                                    Type = ReferenceType.Schema,
+                                    Id = operation.IsDeltaFunction() ? Constants.BaseDeltaFunctionResponse  // @odata.nextLink + @odata.deltaLink
+                                        : Constants.BaseCollectionPaginationCountResponse // @odata.nextLink + @odata.count
+                                }
+                            },
+                            baseSchema
+                        }
+                    };
+                }
+                else if (operation.IsDeltaFunction())
+                {
+                    baseSchema.Properties.Add(ODataConstants.OdataNextLink);
+                    baseSchema.Properties.Add(ODataConstants.OdataDeltaLink);
+                    schema = baseSchema;
+                }
+                else
+                {
+                    if (context.Settings.EnablePagination)
+                    {
+                        baseSchema.Properties.Add(ODataConstants.OdataNextLink);
+                    }
+                    if (context.Settings.EnableCount)
+                    {
+                        baseSchema.Properties.Add(ODataConstants.OdataCount);
+                    }
+                    schema = baseSchema;
+                }
+
+                schema.Title = operation.ReturnType.Definition.AsElementType() is not IEdmEntityType entityType
+                        ? null : $"Collection of {entityType.Name}";
+                schema.Type = "object";             
+            }
+            else if (operation.ReturnType.IsPrimitive())
+            {
+                // A property or operation response that is of a primitive type is represented as an object with a single name/value pair,
+                // whose name is value and whose value is a primitive value.
+                schema = new OpenApiSchema
+                {
+                    Type = "object",
+                    Properties = new Dictionary<string, OpenApiSchema>
+                    {
+                        {
+                            "value", context.CreateEdmTypeSchema(operation.ReturnType)
+                        }
+                    }
+                };
+            }
+            else
+            {
+                schema = context.CreateEdmTypeSchema(operation.ReturnType);
             }
 
-            // Both action & function have the default response.
-            responses.Add(Constants.StatusCodeDefault, Constants.StatusCodeDefault.GetResponse());
+            string mediaType = Constants.ApplicationJsonMediaType;
+            if (operation.ReturnType.AsPrimitive()?.PrimitiveKind() == EdmPrimitiveTypeKind.Stream)
+            {
+                mediaType = context.Model.GetString(operation, CoreConstants.MediaType);
 
-            return responses;
+                if (string.IsNullOrEmpty(mediaType))
+                {
+                    // Use default if MediaType annotation is not specified
+                    mediaType = Constants.ApplicationOctetStreamMediaType;
+                }
+            }
+
+            OpenApiResponse response = new()
+            {
+                Description = "Success",
+                Content = new Dictionary<string, OpenApiMediaType>
+                {
+                    {
+                        mediaType,
+                        new OpenApiMediaType
+                        {
+                            Schema = schema
+                        }
+                    }
+                }
+            };
+
+            return response;
         }
 
         private static OpenApiResponse CreateCollectionResponse(IEdmStructuredType structuredType)

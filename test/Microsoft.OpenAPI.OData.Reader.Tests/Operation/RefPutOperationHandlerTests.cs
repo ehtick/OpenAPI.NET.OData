@@ -16,15 +16,18 @@ namespace Microsoft.OpenApi.OData.Operation.Tests
         private RefPutOperationHandler _operationHandler = new RefPutOperationHandler();
 
         [Theory]
-        [InlineData(true)]
-        [InlineData(false)]
-        public void CreateNavigationRefPutOperationReturnsCorrectOperation(bool enableOperationId)
+        [InlineData(true, true)]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        [InlineData(false, false)]
+        public void CreateNavigationRefPutOperationReturnsCorrectOperation(bool enableOperationId, bool useHTTPStatusCodeClass2XX)
         {
             // Arrange
             IEdmModel model = EdmModelHelper.TripServiceModel;
             OpenApiConvertSettings settings = new OpenApiConvertSettings
             {
-                EnableOperationId = enableOperationId
+                EnableOperationId = enableOperationId,
+                UseSuccessStatusCodeRange = useHTTPStatusCodeClass2XX
             };
             ODataContext context = new ODataContext(model, settings);
             IEdmEntitySet people = model.EntityContainer.FindEntitySet("People");
@@ -33,7 +36,7 @@ namespace Microsoft.OpenApi.OData.Operation.Tests
             IEdmEntityType person = model.SchemaElements.OfType<IEdmEntityType>().First(c => c.Name == "Person");
             IEdmNavigationProperty navProperty = person.DeclaredNavigationProperties().First(c => c.Name == "BestFriend");
             ODataPath path = new ODataPath(new ODataNavigationSourceSegment(people),
-                new ODataKeySegment(people.EntityType()),
+                new ODataKeySegment(people.EntityType),
                 new ODataNavigationPropertySegment(navProperty),
                 ODataRefSegment.Instance);
 
@@ -49,10 +52,10 @@ namespace Microsoft.OpenApi.OData.Operation.Tests
             Assert.Equal("People.Person", tag.Name);
 
             Assert.NotNull(operation.Parameters);
-            Assert.Equal(1, operation.Parameters.Count);
+            Assert.Single(operation.Parameters);
 
-            Assert.NotNull(operation.RequestBody);
-            Assert.Equal("New navigation property ref values", operation.RequestBody.Description);
+            Assert.Equal(Models.ReferenceType.RequestBody, operation.RequestBody.Reference.Type);
+            Assert.Equal(Common.Constants.ReferencePutRequestBodyName, operation.RequestBody.Reference.Id);
 
             Assert.Equal(2, operation.Responses.Count);
             Assert.Equal(new string[] { "204", "default" }, operation.Responses.Select(e => e.Key));

@@ -96,8 +96,13 @@ namespace Microsoft.OpenApi.OData.Vocabulary.Capabilities
         public const string KeyAsSegmentSupported = "Org.OData.Capabilities.V1.KeyAsSegmentSupported";
 
         /// <summary>
-        /// Org.OData.Core.V1.AcceptableMediaTypes
+        /// RequiresExplicitBinding
         /// </summary>
-        public const string AcceptableMediaTypes = "Org.OData.Core.V1.AcceptableMediaTypes";
+        public const string RequiresExplicitBindingName = "RequiresExplicitBinding";
+
+        /// <summary>
+        /// Org.OData.Capabilities.V1.ExplicitOperationBindings
+        /// </summary>
+        public const string ExplicitOperationBindings = "Org.OData.Core.V1.ExplicitOperationBindings";
     }
 }

@@ -18,11 +18,14 @@ public class ODataTypeCastSegment : ODataSegment
     /// Initializes a new instance of <see cref="ODataTypeCastSegment"/> class.
     /// </summary>
     /// <param name="structuredType">The target type cast type.</param>
-    public ODataTypeCastSegment(IEdmStructuredType structuredType)
+    /// <param name="model">The model the type is a part of.</param>
+    public ODataTypeCastSegment(IEdmStructuredType structuredType, IEdmModel model)
     {
         StructuredType = structuredType ?? throw Error.ArgumentNull(nameof(structuredType));
+        _model = model ?? throw Error.ArgumentNull(nameof(model));
     }
 
+    private readonly IEdmModel _model;
     /// <inheritdoc />
     public override IEdmEntityType EntityType => null;
 
@@ -44,5 +47,13 @@ public class ODataTypeCastSegment : ODataSegment
     }
 
     /// <inheritdoc />
-    public override string GetPathItemName(OpenApiConvertSettings settings, HashSet<string> parameters) => StructuredType.FullTypeName();
+    public override string GetPathItemName(OpenApiConvertSettings settings, HashSet<string> parameters)
+    {
+        Utils.CheckArgumentNull(settings, nameof(settings));
+        
+
+        return StructuredType is IEdmSchemaElement element && _model != null
+            ? EdmModelHelper.StripOrAliasNamespacePrefix(element, settings, _model)
+            : StructuredType.FullTypeName();
+    }
 }

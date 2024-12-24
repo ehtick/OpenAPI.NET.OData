@@ -57,17 +57,17 @@ namespace Microsoft.OpenApi.OData.PathItem.Tests
         }
 
         [Theory]
-        [InlineData(true, new OperationType[] { OperationType.Delete})]
-        [InlineData(true, new OperationType[] { OperationType.Get, OperationType.Post})]
+        [InlineData(true, new OperationType[] { OperationType.Delete}, true)]
+        [InlineData(true, new OperationType[] { OperationType.Get, OperationType.Post, OperationType.Delete })]
         [InlineData(false, new OperationType[] { OperationType.Get, OperationType.Put, OperationType.Delete })]
-        public void CreateNavigationPropertyRefPathItemReturnsCorrectPathItem(bool collectionNav, OperationType[] expected)
+        public void CreateNavigationPropertyRefPathItemReturnsCorrectPathItem(bool collectionNav, OperationType[] expected, bool indexedColNav = false)
         {
             // Arrange
             IEdmModel model = GetEdmModel("");
             ODataContext context = new ODataContext(model);
             IEdmEntitySet entitySet = model.EntityContainer.FindEntitySet("Customers");
             Assert.NotNull(entitySet); // guard
-            IEdmEntityType entityType = entitySet.EntityType();
+            IEdmEntityType entityType = entitySet.EntityType;
 
             IEdmNavigationProperty property = entityType.DeclaredNavigationProperties()
                 .FirstOrDefault(c => !c.ContainsTarget &&
@@ -75,7 +75,7 @@ namespace Microsoft.OpenApi.OData.PathItem.Tests
             Assert.NotNull(property);
 
             ODataPath path;
-            if (collectionNav && expected.Contains(OperationType.Delete))
+            if (collectionNav && indexedColNav)
             {
                 // DELETE ~/entityset/{key}/collection-valued-Nav/{key}/$ref
                 path = new ODataPath(new ODataNavigationSourceSegment(entitySet),

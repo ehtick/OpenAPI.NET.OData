@@ -38,9 +38,12 @@ namespace Microsoft.OpenApi.OData.Tests
         public static IEdmModel CompositeKeyModel { get; }
 
         public static IEdmModel TripServiceModel { get; }
+
         public static IEdmModel ContractServiceModel { get; }
 
         public static IEdmModel GraphBetaModel { get; }
+
+        public static IEdmModel ComposableFunctionsModel { get; }
 
         static EdmModelHelper()
         {
@@ -52,6 +55,7 @@ namespace Microsoft.OpenApi.OData.Tests
             GraphBetaModel = LoadEdmModel("Graph.Beta.OData.xml");
             MultipleSchemasEdmModel = LoadEdmModel("Multiple.Schema.OData.xml");
             InheritanceEdmModelAcrossReferences = CreateInheritanceEdmModelAcrossReferences();
+            ComposableFunctionsModel = LoadEdmModel("ComposableFunctions.OData.xml");
         }
 
         private static IEdmModel LoadEdmModel(string source)
@@ -302,7 +306,7 @@ namespace Microsoft.OpenApi.OData.Tests
             model.AddElement(customer);
 
             var container = new EdmEntityContainer("NS", "Container");
-            var customers = container.AddEntitySet("Customers", customer);
+            container.AddEntitySet("Customers", customer);
             model.AddElement(container);
             return model;
         }
@@ -358,7 +362,7 @@ namespace Microsoft.OpenApi.OData.Tests
         <Property Name=""Name"" Type=""Edm.String"" Nullable=""false"" />
       </EntityType>
       <EntityType Name=""Horse"" BaseType=""NS.Animal"" OpenType=""true"">
-        <Property Name=""Height"" Type=""Edm.Decimal"" Nullable=""false"" />
+        <Property Name=""Height"" Type=""Edm.Decimal"" Nullable=""false"" Scale=""variable"" />
       </EntityType>
       <ComplexType Name=""Plant"" Abstract=""true"" OpenType=""true"">
         <Property Name=""Color"" Type=""NS.Color"" Nullable=""false"" />
@@ -374,7 +378,7 @@ namespace Microsoft.OpenApi.OData.Tests
         <Property Name=""Name"" Type=""Edm.String"" Nullable=""false"" />
       </ComplexType>
       <ComplexType Name=""Tree"" BaseType=""NS.LandPlant"" OpenType=""true"">
-        <Property Name=""Price"" Type=""Edm.Decimal"" Nullable=""false"" />
+        <Property Name=""Price"" Type=""Edm.Decimal"" Nullable=""false"" Scale=""variable"" />
       </ComplexType>
       <ComplexType Name=""Flower"" BaseType=""NS.LandPlant"" OpenType=""true"">
         <Property Name=""Height"" Type=""Edm.Double"" Nullable=""false"" />

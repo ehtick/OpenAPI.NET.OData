@@ -3,7 +3,6 @@
 //  Licensed under the MIT License (MIT). See LICENSE in the repo root for license information.
 // ------------------------------------------------------------
 
-using System;
 using System.Linq;
 using Microsoft.OData.Edm;
 using Microsoft.OpenApi.OData.Edm;
@@ -14,22 +13,26 @@ namespace Microsoft.OpenApi.OData.Operation.Tests;
 public class ComplexPropertyPutOperationHandlerTests
 {
 	private readonly ComplexPropertyPutOperationHandler _operationHandler = new();
+
 	[Theory]
-	[InlineData(true)]
-	[InlineData(false)]
-	public void CreateComplexPropertyDeleteOperationReturnsCorrectOperationForSingle(bool enableOperationId)
+	[InlineData(true, true)]
+	[InlineData(false, true)]
+	[InlineData(true, false)]
+	[InlineData(false, false)]
+	public void CreateComplexPropertyPutOperationReturnsCorrectOperationForSingle(bool enableOperationId, bool useHTTPStatusCodeClass2XX)
 	{
 		// Arrange
 		var model = EntitySetGetOperationHandlerTests.GetEdmModel("");
 		var entitySet = model.EntityContainer.FindEntitySet("Customers");
-		var entity = entitySet.EntityType();
+		var entity = entitySet.EntityType;
 		var property = entity.FindProperty("BillingAddress");
 		var settings = new OpenApiConvertSettings
 		{
-			EnableOperationId = enableOperationId
+			EnableOperationId = enableOperationId,
+			UseSuccessStatusCodeRange = useHTTPStatusCodeClass2XX
 		};
 		var context = new ODataContext(model, settings);
-		var path = new ODataPath(new ODataNavigationSourceSegment(entitySet), new ODataKeySegment(entitySet.EntityType()), new ODataComplexPropertySegment(property as IEdmStructuralProperty));
+		var path = new ODataPath(new ODataNavigationSourceSegment(entitySet), new ODataKeySegment(entitySet.EntityType), new ODataComplexPropertySegment(property as IEdmStructuralProperty));
 
 		// Act
 		var put = _operationHandler.CreateOperation(context, path);
@@ -40,15 +43,25 @@ public class ComplexPropertyPutOperationHandlerTests
 		Assert.Equal("Update the BillingAddress value.", put.Description);
 
 		Assert.NotNull(put.Parameters);
-		Assert.Equal(1, put.Parameters.Count); //id
+		Assert.Single(put.Parameters); //id
 
 		Assert.NotNull(put.Responses);
 		Assert.Equal(2, put.Responses.Count);
-		Assert.Equal(new[] { "204", "default" }, put.Responses.Select(r => r.Key));
+		var statusCode = useHTTPStatusCodeClass2XX ? "2XX" : "204";
+		Assert.Equal(new[] { statusCode, "default" }, put.Responses.Select(r => r.Key));
+
+		if (useHTTPStatusCodeClass2XX)
+        {
+			Assert.Single(put.Responses[statusCode].Content);
+		}
+		else
+		{
+			Assert.Empty(put.Responses[statusCode].Content);
+		}
 
 		if (enableOperationId)
 		{
-			Assert.Equal("BillingAddress.Address.UpdateAddress", put.OperationId);
+			Assert.Equal("Customers.SetBillingAddress", put.OperationId);
 		}
 		else
 		{
@@ -58,38 +71,44 @@ public class ComplexPropertyPutOperationHandlerTests
 	[Theory]
 	[InlineData(true)]
 	[InlineData(false)]
-	public void CreateComplexPropertyPostOperationReturnsCorrectOperationForCollection(bool enableOperationId)
+	public void CreateComplexPropertyPutOperationReturnsCorrectOperationForCollection(bool enableOperationId)
 	{
 		// Arrange
 		var model = EntitySetGetOperationHandlerTests.GetEdmModel("");
 		var entitySet = model.EntityContainer.FindEntitySet("Customers");
-		var entity = entitySet.EntityType();
-		var property = entity.FindProperty("BillingAddress");
+		var entity = entitySet.EntityType;
+		var property = entity.FindProperty("AlternativeAddresses");
 		var settings = new OpenApiConvertSettings
 		{
 			EnableOperationId = enableOperationId
 		};
 		var context = new ODataContext(model, settings);
-		var path = new ODataPath(new ODataNavigationSourceSegment(entitySet), new ODataKeySegment(entitySet.EntityType()), new ODataComplexPropertySegment(property as IEdmStructuralProperty));
+		var path = new ODataPath(new ODataNavigationSourceSegment(entitySet), new ODataKeySegment(entitySet.EntityType), new ODataComplexPropertySegment(property as IEdmStructuralProperty));
 
 		// Act
 		var put = _operationHandler.CreateOperation(context, path);
 
 		// Assert
 		Assert.NotNull(put);
-		Assert.Equal("Update the BillingAddress.", put.Summary);
-		Assert.Equal("Update the BillingAddress value.", put.Description);
+		Assert.Equal("Update the AlternativeAddresses.", put.Summary);
+		Assert.Equal("Update the AlternativeAddresses value.", put.Description);
 
 		Assert.NotNull(put.Parameters);
-		Assert.Equal(1, put.Parameters.Count); //id
+		Assert.Single(put.Parameters); //id
 
 		Assert.NotNull(put.Responses);
 		Assert.Equal(2, put.Responses.Count);
 		Assert.Equal(new[] { "204", "default" }, put.Responses.Select(r => r.Key));
+		var schema = put.RequestBody?.Content.FirstOrDefault().Value?.Schema;
 
-		if (enableOperationId)
+        Assert.NotNull(schema);
+		Assert.Equal("object", schema.Type);
+		Assert.Equal("value", schema.Properties.FirstOrDefault().Key);
+        Assert.Equal("array", schema.Properties.FirstOrDefault().Value.Type);
+
+        if (enableOperationId)
 		{
-			Assert.Equal("BillingAddress.Address.UpdateAddress", put.OperationId);
+			Assert.Equal("Customers.SetAlternativeAddresses", put.OperationId);
 		}
 		else
 		{

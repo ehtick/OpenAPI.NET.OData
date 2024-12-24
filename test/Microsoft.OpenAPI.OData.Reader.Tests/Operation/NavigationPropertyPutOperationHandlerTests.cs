@@ -18,15 +18,18 @@ namespace Microsoft.OpenApi.OData.Operation.Tests
         private NavigationPropertyPutOperationHandler _operationHandler = new NavigationPropertyPutOperationHandler();
 
         [Theory]
-        [InlineData(true)]
-        [InlineData(false)]
-        public void CreateNavigationPutOperationReturnsCorrectOperation(bool enableOperationId)
+        [InlineData(true, true)]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        [InlineData(false, false)]
+        public void CreateNavigationPutOperationReturnsCorrectOperation(bool enableOperationId, bool useHTTPStatusCodeClass2XX)
         {
             // Arrange
             IEdmModel model = EdmModelHelper.TripServiceModel;
             OpenApiConvertSettings settings = new OpenApiConvertSettings
             {
-                EnableOperationId = enableOperationId
+                EnableOperationId = enableOperationId,
+                UseSuccessStatusCodeRange = useHTTPStatusCodeClass2XX
             };
             ODataContext context = new ODataContext(model, settings);
             IEdmEntitySet people = model.EntityContainer.FindEntitySet("People");
@@ -34,7 +37,7 @@ namespace Microsoft.OpenApi.OData.Operation.Tests
 
             IEdmEntityType person = model.SchemaElements.OfType<IEdmEntityType>().First(c => c.Name == "Person");
             IEdmNavigationProperty navProperty = person.DeclaredNavigationProperties().First(c => c.Name == "BestFriend");
-            ODataPath path = new ODataPath(new ODataNavigationSourceSegment(people), new ODataKeySegment(people.EntityType()), new ODataNavigationPropertySegment(navProperty));
+            ODataPath path = new ODataPath(new ODataNavigationSourceSegment(people), new ODataKeySegment(people.EntityType), new ODataNavigationPropertySegment(navProperty));
 
             // Act
             var operation = _operationHandler.CreateOperation(context, path);
@@ -48,17 +51,27 @@ namespace Microsoft.OpenApi.OData.Operation.Tests
             Assert.Equal("People.Person", tag.Name);
 
             Assert.NotNull(operation.Parameters);
-            Assert.Equal(1, operation.Parameters.Count);
+            Assert.Single(operation.Parameters);
 
             Assert.NotNull(operation.RequestBody);
             Assert.Equal("New navigation property values", operation.RequestBody.Description);
 
             Assert.Equal(2, operation.Responses.Count);
-            Assert.Equal(new string[] { "204", "default" }, operation.Responses.Select(e => e.Key));
+            var statusCode = useHTTPStatusCodeClass2XX ? "2XX" : "204";
+            Assert.Equal(new string[] { statusCode, "default" }, operation.Responses.Select(e => e.Key));
+
+            if (useHTTPStatusCodeClass2XX)
+            {
+                Assert.Single(operation.Responses[statusCode].Content);
+            }
+            else
+            {
+                Assert.Empty(operation.Responses[statusCode].Content);
+            }
 
             if (enableOperationId)
             {
-                Assert.Equal("People.UpdateBestFriend", operation.OperationId);
+                Assert.Equal("People.SetBestFriend", operation.OperationId);
             }
             else
             {
@@ -145,7 +158,7 @@ namespace Microsoft.OpenApi.OData.Operation.Tests
             ODataContext context = new ODataContext(edmModel);
             IEdmEntitySet entitySet = edmModel.EntityContainer.FindEntitySet("Customers");
             Assert.NotNull(entitySet); // guard
-            IEdmEntityType entityType = entitySet.EntityType();
+            IEdmEntityType entityType = entitySet.EntityType;
 
             IEdmNavigationProperty property = entityType.DeclaredNavigationProperties().FirstOrDefault(c => c.Name == "Orders");
             Assert.NotNull(property);

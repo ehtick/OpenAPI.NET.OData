@@ -1,4 +1,4 @@
-﻿// ------------------------------------------------------------
+// ------------------------------------------------------------
 //  Copyright (c) Microsoft Corporation.  All rights reserved.
 //  Licensed under the MIT License (MIT). See LICENSE in the repo root for license information.
 // ------------------------------------------------------------
@@ -45,6 +45,90 @@ namespace Microsoft.OpenApi.OData.Generator.Tests
             Assert.Equal(5, parameters.Count);
             Assert.Equal(new[] { "top", "skip", "count", "filter", "search" },
                 parameters.Select(p => p.Key));
+            Assert.Collection(parameters,
+                item => // $top
+                {
+                    string json = item.Value.SerializeAsJson(OpenApiSpecVersion.OpenApi3_0);
+                    string expected = @"{
+  ""name"": ""$top"",
+  ""in"": ""query"",
+  ""description"": ""Show only the first n items"",
+  ""style"": ""form"",
+  ""explode"": false,
+  ""schema"": {
+    ""minimum"": 0,
+    ""type"": ""integer""
+  },
+  ""example"": 50
+}";
+
+                    Assert.Equal(expected.ChangeLineBreaks(), json);
+                },
+                item => // $skip
+                {
+                    string json = item.Value.SerializeAsJson(OpenApiSpecVersion.OpenApi3_0);
+                    string expected = @"{
+  ""name"": ""$skip"",
+  ""in"": ""query"",
+  ""description"": ""Skip the first n items"",
+  ""style"": ""form"",
+  ""explode"": false,
+  ""schema"": {
+    ""minimum"": 0,
+    ""type"": ""integer""
+  }
+}";
+
+                    Assert.Equal(expected.ChangeLineBreaks(), json);
+                },
+                item => // $count
+                {
+                    string json = item.Value.SerializeAsJson(OpenApiSpecVersion.OpenApi3_0);
+                    string expected = @"{
+  ""name"": ""$count"",
+  ""in"": ""query"",
+  ""description"": ""Include count of items"",
+  ""style"": ""form"",
+  ""explode"": false,
+  ""schema"": {
+    ""type"": ""boolean""
+  }
+}";
+
+                    Assert.Equal(expected.ChangeLineBreaks(), json);
+                },
+                item => // $filter
+                {
+                    string json = item.Value.SerializeAsJson(OpenApiSpecVersion.OpenApi3_0);
+                    string expected = @"{
+  ""name"": ""$filter"",
+  ""in"": ""query"",
+  ""description"": ""Filter items by property values"",
+  ""style"": ""form"",
+  ""explode"": false,
+  ""schema"": {
+    ""type"": ""string""
+  }
+}";
+
+                    Assert.Equal(expected.ChangeLineBreaks(), json);
+                },
+                item => // $search
+                {
+                    string json = item.Value.SerializeAsJson(OpenApiSpecVersion.OpenApi3_0);
+                    string expected = @"{
+  ""name"": ""$search"",
+  ""in"": ""query"",
+  ""description"": ""Search items by search phrases"",
+  ""style"": ""form"",
+  ""explode"": false,
+  ""schema"": {
+    ""type"": ""string""
+  }
+}";
+
+                    Assert.Equal(expected.ChangeLineBreaks(), json);
+                });
         }
 
         [Fact]
@@ -66,6 +150,8 @@ namespace Microsoft.OpenApi.OData.Generator.Tests
 @"name: $skip
 in: query
 description: Skip the first n items
+style: form
+explode: false
 schema:
   minimum: 0
   type: integer
@@ -104,7 +190,7 @@ schema:
                 expected = @"{
   ""name"": ""Customer-Id"",
   ""in"": ""path"",
-  ""description"": ""key: Customer-Id of Customer"",
+  ""description"": ""The unique identifier of Customer"",
   ""required"": true,
   ""schema"": {
     ""type"": ""string"",
@@ -118,7 +204,7 @@ schema:
                 expected = @"{
   ""name"": ""Id"",
   ""in"": ""path"",
-  ""description"": ""key: Id of Customer"",
+  ""description"": ""The unique identifier of Customer"",
   ""required"": true,
   ""schema"": {
     ""type"": ""string"",
@@ -162,7 +248,7 @@ schema:
             string expected = @"{
   ""name"": ""firstName"",
   ""in"": ""path"",
-  ""description"": ""key: firstName of Customer"",
+  ""description"": ""Property in multi-part unique identifier of Customer"",
   ""required"": true,
   ""schema"": {
     ""type"": ""string"",
@@ -178,7 +264,7 @@ schema:
             expected = @"{
   ""name"": ""lastName"",
   ""in"": ""path"",
-  ""description"": ""key: lastName of Customer"",
+  ""description"": ""Property in multi-part unique identifier of Customer"",
   ""required"": true,
   ""schema"": {
     ""type"": ""string"",
@@ -190,11 +276,117 @@ schema:
         }
 
         [Fact]
-        public void CreateOrderByAndSelectAndExpandParametersWorks()
+        public void CreateKeyParametersForAlternateKeyWithSinglePropertyWorks()
+        {
+            // Arrange
+            EdmModel model = new();
+            EdmEntityType customer = new("NS", "Customer");
+            customer.AddKeys(customer.AddStructuralProperty("Id", EdmPrimitiveTypeKind.String));
+
+            IEdmProperty alternateId1 = customer.AddStructuralProperty("AlternateId1", EdmPrimitiveTypeKind.String);
+            IEdmProperty alternateId2 = customer.AddStructuralProperty("AlternateId2", EdmPrimitiveTypeKind.String);
+            model.AddAlternateKeyAnnotation(customer, new Dictionary<string, IEdmProperty> { { "AltId1", alternateId1 } });
+            model.AddAlternateKeyAnnotation(customer, new Dictionary<string, IEdmProperty> { { "AltId2", alternateId2 } });
+            IDictionary<string, string> keyMappings = new Dictionary<string, string> { { "AltId1", "AltId1" } };
+
+            model.AddElement(customer);
+            ODataContext context = new(model);
+            ODataKeySegment keySegment = new(customer, keyMappings)
+            {
+                IsAlternateKey = true
+            };
+
+            // Act
+            var parameters = context.CreateKeyParameters(keySegment);
+            var altParameter = parameters.Last();
+
+            // Assert
+            Assert.NotNull(parameters);
+            Assert.Single(parameters);
+            string json = altParameter.SerializeAsJson(OpenApiSpecVersion.OpenApi3_0);
+            Assert.Equal(@"{
+  ""name"": ""AltId1"",
+  ""in"": ""path"",
+  ""description"": ""Alternate key of Customer"",
+  ""required"": true,
+  ""schema"": {
+    ""type"": ""string"",
+    ""nullable"": true
+  }
+}".ChangeLineBreaks(), json);
+        }
+
+        [Fact]
+        public void CreateKeyParametersForAlternateKeyWithMultiplePropertiesWorks()
+        {
+            // Arrange
+            EdmModel model = new();
+            EdmEntityType customer = new("NS", "Customer");
+            customer.AddKeys(customer.AddStructuralProperty("Id", EdmPrimitiveTypeKind.String));
+
+            IEdmProperty alternateId1 = customer.AddStructuralProperty("AlternateId1", EdmPrimitiveTypeKind.String);
+            IEdmProperty alternateId2 = customer.AddStructuralProperty("AlternateId2", EdmPrimitiveTypeKind.String);
+            model.AddAlternateKeyAnnotation(customer,
+                new Dictionary<string, IEdmProperty>
+                {
+                    { "AltId1", alternateId1 },
+                    { "AltId2", alternateId2 }
+                });
+
+            IDictionary<string, string> keyMappings = new Dictionary<string, string> { { "AltId1", "AltId1" }, { "AltId2", "AltId2" } };
+
+            model.AddElement(customer);
+            ODataContext context = new(model);
+            ODataKeySegment keySegment = new(customer, keyMappings)
+            {
+                IsAlternateKey = true
+            };
+
+            // Act
+            var parameters = context.CreateKeyParameters(keySegment);
+            var altParameter1 = parameters.First();
+            var altParameter2 = parameters.Last();
+
+            // Assert
+            Assert.NotNull(parameters);
+            Assert.Equal(2, parameters.Count);
+            string json1 = altParameter1.SerializeAsJson(OpenApiSpecVersion.OpenApi3_0);
+            Assert.Equal(@"{
+  ""name"": ""AltId1"",
+  ""in"": ""path"",
+  ""description"": ""Property in multi-part alternate key of Customer"",
+  ""required"": true,
+  ""schema"": {
+    ""type"": ""string"",
+    ""nullable"": true
+  }
+}".ChangeLineBreaks(), json1);
+
+            string json2 = altParameter2.SerializeAsJson(OpenApiSpecVersion.OpenApi3_0);
+            Assert.Equal(@"{
+  ""name"": ""AltId2"",
+  ""in"": ""path"",
+  ""description"": ""Property in multi-part alternate key of Customer"",
+  ""required"": true,
+  ""schema"": {
+    ""type"": ""string"",
+    ""nullable"": true
+  }
+}".ChangeLineBreaks(), json2);
+        }
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void CreateOrderByAndSelectAndExpandParametersWorks(bool useStringArrayForQueryOptionsSchema)
         {
             // Arrange
             IEdmModel model = GetEdmModel();
-            ODataContext context = new ODataContext(model, new OpenApiConvertSettings());
+            ODataContext context = new(model,
+                new OpenApiConvertSettings() 
+                { 
+                    UseStringArrayForQueryOptionsSchema = useStringArrayForQueryOptionsSchema 
+                });
             IEdmEntitySet entitySet = model.EntityContainer.FindEntitySet("Customers");
             IEdmSingleton singleton = model.EntityContainer.FindSingleton("Catalog");
             IEdmEntityType entityType = model.SchemaElements.OfType<IEdmEntityType>().First(c => c.Name == "Customer");
@@ -202,7 +394,7 @@ schema:
 
             // Act & Assert
             // OrderBy
-            string orderByItemsText = @"""enum"": [
+            string orderByItemsText = useStringArrayForQueryOptionsSchema ? null :  @"""enum"": [
         ""ID"",
         ""ID desc""
       ],";
@@ -211,7 +403,7 @@ schema:
             VerifyCreateOrderByParameter(navigationProperty, context);
 
             // Select
-            string selectItemsText = @"""enum"": [
+            string selectItemsText = useStringArrayForQueryOptionsSchema ? null : @"""enum"": [
         ""ID"",
         ""Addresses""
       ],";
@@ -220,13 +412,13 @@ schema:
             VerifyCreateSelectParameter(navigationProperty, context);
 
             // Expand
-            string expandItemsText = @"""enum"": [
+            string expandItemsText = useStringArrayForQueryOptionsSchema ? null : @"""enum"": [
         ""*"",
         ""Addresses""
       ],";
             VerifyCreateExpandParameter(entitySet, context, expandItemsText);
 
-            string expandItemsDefaultText = @"""enum"": [
+            string expandItemsDefaultText = useStringArrayForQueryOptionsSchema ? null : @"""enum"": [
         ""*""
       ],";
             VerifyCreateExpandParameter(singleton, context, expandItemsDefaultText);
@@ -351,7 +543,24 @@ schema:
 
             string json = parameter.SerializeAsJson(OpenApiSpecVersion.OpenApi3_0);
 
-            string expected = $@"{{
+            string expected = expandItemsText == null
+                ? 
+                $@"{{
+  ""name"": ""$expand"",
+  ""in"": ""query"",
+  ""description"": ""Expand related entities"",
+  ""style"": ""form"",
+  ""explode"": false,
+  ""schema"": {{
+    ""uniqueItems"": true,
+    ""type"": ""array"",
+    ""items"": {{
+      ""type"": ""string""
+    }}
+  }}
+}}"
+                :
+                $@"{{
   ""name"": ""$expand"",
   ""in"": ""query"",
   ""description"": ""Expand related entities"",

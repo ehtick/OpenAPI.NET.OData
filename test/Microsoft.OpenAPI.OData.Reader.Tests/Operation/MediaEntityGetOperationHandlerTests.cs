@@ -7,7 +7,6 @@ using Microsoft.OData.Edm;
 using Microsoft.OData.Edm.Csdl;
 using Microsoft.OpenApi.OData.Common;
 using Microsoft.OpenApi.OData.Edm;
-using Microsoft.OpenApi.OData.Vocabulary.Capabilities;
 using System.Linq;
 using System.Xml.Linq;
 using Xunit;
@@ -19,33 +18,48 @@ namespace Microsoft.OpenApi.OData.Operation.Tests
         private readonly MediaEntityGetOperationHandler _operationalHandler = new MediaEntityGetOperationHandler();
 
         [Theory]
-        [InlineData(true)]
-        [InlineData(false)]
-        public void CreateMediaEntityGetOperationReturnsCorrectOperation(bool enableOperationId)
+        [InlineData(true, true)]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        [InlineData(false, false)]
+        public void CreateMediaEntityGetOperationReturnsCorrectOperation(bool enableOperationId, bool useHTTPStatusCodeClass2XX)
         {
             // Arrange
-            string qualifiedName = CapabilitiesConstants.AcceptableMediaTypes;
             string annotation = $@"
-            <Annotation Term=""{qualifiedName}"" >
+            <Annotation Term=""Org.OData.Core.V1.AcceptableMediaTypes"" >
               <Collection>
                 <String>image/png</String>
                 <String>image/jpeg</String>
               </Collection>
             </Annotation>
-            <Annotation Term=""Org.OData.Core.V1.Description"" String=""The logo image."" />";
+            <Annotation Term=""Org.OData.Core.V1.Description"" String=""The logo image."" />
+            <Annotation Term=""Org.OData.Capabilities.V1.ReadRestrictions"">
+              <Record>
+                <PropertyValue Property=""CustomQueryOptions"">
+                  <Collection>
+                    <Record>
+                      <PropertyValue Property=""Name"" String=""format"" />
+                      <PropertyValue Property=""Description"" String=""Specify the format the item's content should be downloaded as."" />
+                      <PropertyValue Property=""Required"" Bool=""false"" />
+                    </Record>                
+                  </Collection>
+                </PropertyValue>
+              </Record>
+            </Annotation>";
 
             // Assert
-            VerifyMediaEntityGetOperation("", enableOperationId);
-            VerifyMediaEntityGetOperation(annotation, enableOperationId);
+            VerifyMediaEntityGetOperation("", enableOperationId, useHTTPStatusCodeClass2XX);
+            VerifyMediaEntityGetOperation(annotation, enableOperationId, useHTTPStatusCodeClass2XX);
         }
 
-        private void VerifyMediaEntityGetOperation(string annotation, bool enableOperationId)
+        private void VerifyMediaEntityGetOperation(string annotation, bool enableOperationId, bool useHTTPStatusCodeClass2XX)
         {
             // Arrange
             IEdmModel model = GetEdmModel(annotation);
             OpenApiConvertSettings settings = new OpenApiConvertSettings
             {
-                EnableOperationId = enableOperationId
+                EnableOperationId = enableOperationId,
+                UseSuccessStatusCodeRange = useHTTPStatusCodeClass2XX
             };
 
             ODataContext context = new ODataContext(model, settings);
@@ -57,7 +71,7 @@ namespace Microsoft.OpenApi.OData.Operation.Tests
             IEdmEntityType todo = model.SchemaElements.OfType<IEdmEntityType>().First(c => c.Name == "Todo");
             IEdmStructuralProperty sp = todo.StructuralProperties().First(c => c.Name == "Logo");
             ODataPath path = new ODataPath(new ODataNavigationSourceSegment(todos),
-                new ODataKeySegment(todos.EntityType()),
+                new ODataKeySegment(todos.EntityType),
                 new ODataStreamPropertySegment(sp.Name));
 
             IEdmEntityType user = model.SchemaElements.OfType<IEdmEntityType>().First(c => c.Name == "user");
@@ -87,25 +101,36 @@ namespace Microsoft.OpenApi.OData.Operation.Tests
             Assert.NotNull(getOperation2.Responses);
             Assert.Equal(2, getOperation.Responses.Count);
             Assert.Equal(2, getOperation2.Responses.Count);
-            Assert.Equal(new[] { "200", "default" }, getOperation.Responses.Select(r => r.Key));
-            Assert.Equal(new[] { "200", "default" }, getOperation2.Responses.Select(r => r.Key));
+            var statusCode = useHTTPStatusCodeClass2XX ? Constants.StatusCodeClass2XX : Constants.StatusCode200;
+            Assert.Equal(new[] { statusCode, "default" }, getOperation.Responses.Select(r => r.Key));
+            Assert.Equal(new[] { statusCode, "default" }, getOperation2.Responses.Select(r => r.Key));
+            Assert.NotNull(getOperation.Responses[statusCode].Content.Values?.Select(x => x.Schema));
+
+            foreach (var item in getOperation.Responses[statusCode].Content)
+            {
+                Assert.Equal("binary", item.Value.Schema.Format);
+                Assert.Equal("string", item.Value.Schema.Type);
+            }
 
             if (!string.IsNullOrEmpty(annotation))
             {
-                Assert.Equal(2, getOperation.Responses[Constants.StatusCode200].Content.Keys.Count);
-                Assert.True(getOperation.Responses[Constants.StatusCode200].Content.ContainsKey("image/png"));
-                Assert.True(getOperation.Responses[Constants.StatusCode200].Content.ContainsKey("image/jpeg"));
+                Assert.Equal(2, getOperation.Responses[statusCode].Content.Keys.Count);
+                Assert.True(getOperation.Responses[statusCode].Content.ContainsKey("image/png"));
+                Assert.True(getOperation.Responses[statusCode].Content.ContainsKey("image/jpeg"));
                 Assert.Equal("The logo image.", getOperation.Description);
+                Assert.Equal(2, getOperation.Parameters.Count);
+                Assert.NotNull(getOperation.Parameters.FirstOrDefault(x => x.Name.Equals("format")));
 
-                Assert.Equal(1, getOperation2.Responses[Constants.StatusCode200].Content.Keys.Count);
-                Assert.True(getOperation2.Responses[Constants.StatusCode200].Content.ContainsKey(Constants.ApplicationOctetStreamMediaType));
+                Assert.Single(getOperation2.Responses[statusCode].Content.Keys);
+                Assert.True(getOperation2.Responses[statusCode].Content.ContainsKey(Constants.ApplicationOctetStreamMediaType));
             }
             else
             {
-                Assert.Equal(1, getOperation.Responses[Constants.StatusCode200].Content.Keys.Count);
-                Assert.Equal(1, getOperation2.Responses[Constants.StatusCode200].Content.Keys.Count);
-                Assert.True(getOperation.Responses[Constants.StatusCode200].Content.ContainsKey(Constants.ApplicationOctetStreamMediaType));
-                Assert.True(getOperation2.Responses[Constants.StatusCode200].Content.ContainsKey(Constants.ApplicationOctetStreamMediaType));
+                Assert.Single(getOperation.Parameters);
+                Assert.Single(getOperation.Responses[statusCode].Content.Keys);
+                Assert.Single(getOperation2.Responses[statusCode].Content.Keys);
+                Assert.True(getOperation.Responses[statusCode].Content.ContainsKey(Constants.ApplicationOctetStreamMediaType));
+                Assert.True(getOperation2.Responses[statusCode].Content.ContainsKey(Constants.ApplicationOctetStreamMediaType));
             }
 
             if (enableOperationId)
@@ -131,6 +156,7 @@ namespace Microsoft.OpenApi.OData.Operation.Tests
         </Key>
         <Property Name=""Id"" Type=""Edm.Int32"" Nullable=""false"" />
         <Property Name=""Logo"" Type=""Edm.Stream""/>
+        <Property Name=""Content"" Type=""Edm.Stream""/>
         <Property Name = ""Description"" Type = ""Edm.String"" />
       </EntityType>
       <EntityType Name=""user"" OpenType=""true"">
@@ -157,6 +183,35 @@ namespace Microsoft.OpenApi.OData.Operation.Tests
             bool result = CsdlReader.TryParse(XElement.Parse(modelText).CreateReader(), out IEdmModel model, out _);
             Assert.True(result);
             return model;
+        }
+
+        [Fact]
+        public void CreateMediaEntityPropertyGetOperationWithTargetPathAnnotationsReturnsCorrectOperation()
+        {
+            // Arrange
+            IEdmModel model = OData.Tests.EdmModelHelper.TripServiceModel;
+            ODataContext context = new(model, new OpenApiConvertSettings());
+            IEdmEntitySet people = model.EntityContainer.FindEntitySet("People");
+            Assert.NotNull(people);
+
+            IEdmEntityType person = people.EntityType;
+            IEdmStructuralProperty property = person.StructuralProperties().First(c => c.Name == "Photo");
+            ODataPath path = new (new ODataNavigationSourceSegment(people),
+                new ODataKeySegment(person),
+                new ODataStreamPropertySegment(property.Name));
+
+            // Act
+            var operation = _operationalHandler.CreateOperation(context, path);
+
+            // Assert
+            Assert.NotNull(operation);
+            Assert.Equal("Get photo", operation.Summary);
+            Assert.Equal("Get photo of a specific user", operation.Description);
+            Assert.Single(operation.Parameters);
+
+            Assert.NotNull(operation.ExternalDocs);
+            Assert.Equal("Find more info here", operation.ExternalDocs.Description);
+            Assert.Equal("https://learn.microsoft.com/graph/api/person-get-photo?view=graph-rest-1.0", operation.ExternalDocs.Url.ToString());
         }
     }
 }

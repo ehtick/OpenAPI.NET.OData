@@ -17,19 +17,22 @@ namespace Microsoft.OpenApi.OData.Operation.Tests
         private EntityPutOperationHandler _operationHandler = new EntityPutOperationHandler();
 
         [Theory]
-        [InlineData(true)]
-        [InlineData(false)]
-        public void CreateEntityPutOperationReturnsCorrectOperation(bool enableOperationId)
+        [InlineData(true, true)]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        [InlineData(false, false)]
+        public void CreateEntityPutOperationReturnsCorrectOperation(bool enableOperationId, bool useHTTPStatusCodeClass2XX)
         {
             // Arrange
             IEdmModel model = EntitySetGetOperationHandlerTests.GetEdmModel("");
             IEdmEntitySet entitySet = model.EntityContainer.FindEntitySet("Customers");
             OpenApiConvertSettings settings = new OpenApiConvertSettings
             {
-                EnableOperationId = enableOperationId
+                EnableOperationId = enableOperationId,
+                UseSuccessStatusCodeRange = useHTTPStatusCodeClass2XX
             };
             ODataContext context = new ODataContext(model, settings);
-            ODataPath path = new ODataPath(new ODataNavigationSourceSegment(entitySet), new ODataKeySegment(entitySet.EntityType()));
+            ODataPath path = new ODataPath(new ODataNavigationSourceSegment(entitySet), new ODataKeySegment(entitySet.EntityType));
 
             // Act
             var putOperation = _operationHandler.CreateOperation(context, path);
@@ -43,17 +46,27 @@ namespace Microsoft.OpenApi.OData.Operation.Tests
             Assert.Equal("Customers.Customer", tag.Name);
 
             Assert.NotNull(putOperation.Parameters);
-            Assert.Equal(1, putOperation.Parameters.Count);
+            Assert.Single(putOperation.Parameters);
 
             Assert.NotNull(putOperation.RequestBody);
 
             Assert.NotNull(putOperation.Responses);
             Assert.Equal(2, putOperation.Responses.Count);
-            Assert.Equal(new[] { "204", "default" }, putOperation.Responses.Select(r => r.Key));
+            var statusCode = useHTTPStatusCodeClass2XX ? "2XX" : "204";
+            Assert.Equal(new[] { statusCode, "default" }, putOperation.Responses.Select(r => r.Key));
+
+            if (useHTTPStatusCodeClass2XX)
+            {
+                Assert.Single(putOperation.Responses[statusCode].Content);
+            }
+            else
+            {
+                Assert.Empty(putOperation.Responses[statusCode].Content);
+            }
 
             if (enableOperationId)
             {
-                Assert.Equal("Customers.Customer.UpdateCustomer", putOperation.OperationId);
+                Assert.Equal("Customers.Customer.SetCustomer", putOperation.OperationId);
             }
             else
             {
@@ -127,7 +140,7 @@ namespace Microsoft.OpenApi.OData.Operation.Tests
             ODataContext context = new ODataContext(model);
             IEdmEntitySet customers = model.EntityContainer.FindEntitySet("Customers");
             Assert.NotNull(customers); // guard
-            ODataPath path = new ODataPath(new ODataNavigationSourceSegment(customers), new ODataKeySegment(customers.EntityType()));
+            ODataPath path = new ODataPath(new ODataNavigationSourceSegment(customers), new ODataKeySegment(customers.EntityType));
 
             // Act
             var putOperation = _operationHandler.CreateOperation(context, path);
@@ -163,6 +176,25 @@ namespace Microsoft.OpenApi.OData.Operation.Tests
             {
                 Assert.Empty(putOperation.Security);
             }
+        }
+
+        [Fact]
+        public void CreateEntityPutOperationReturnsCorrectOperationWithAnnotatedRequestBodyContent()
+        {
+            IEdmModel model = EdmModelHelper.GraphBetaModel;
+            OpenApiConvertSettings settings = new();
+            ODataContext context = new(model, settings);
+            IEdmEntitySet entitySet = model.EntityContainer.FindEntitySet("directoryObjects");
+            Assert.NotNull(entitySet);
+
+            ODataPath path = new(new ODataNavigationSourceSegment(entitySet), new ODataKeySegment(entitySet.EntityType));
+
+            // Act
+            var operation = _operationHandler.CreateOperation(context, path);
+
+            // Assert
+            Assert.NotNull(operation.RequestBody);
+            Assert.Equal("multipart/form-data", operation.RequestBody.Content.First().Key);
         }
     }
 }

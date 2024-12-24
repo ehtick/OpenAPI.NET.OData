@@ -20,31 +20,34 @@ public class ComplexPropertyPostOperationHandlerTests
 		// Arrange
 		var model = EntitySetPostOperationHandlerTests.GetEdmModel("");
 		var entitySet = model.EntityContainer.FindEntitySet("Customers");
-		var entity = entitySet.EntityType();
+		var entity = entitySet.EntityType;
 		var property = entity.FindProperty("BillingAddress");
 		var settings = new OpenApiConvertSettings();
 		var context = new ODataContext(model, settings);
-		var path = new ODataPath(new ODataNavigationSourceSegment(entitySet), new ODataKeySegment(entitySet.EntityType()), new ODataComplexPropertySegment(property as IEdmStructuralProperty));
+		var path = new ODataPath(new ODataNavigationSourceSegment(entitySet), new ODataKeySegment(entitySet.EntityType), new ODataComplexPropertySegment(property as IEdmStructuralProperty));
 
 		// Act
 		Assert.Throws<InvalidOperationException>(() => _operationHandler.CreateOperation(context, path));
 	}
 	[Theory]
-	[InlineData(true)]
-	[InlineData(false)]
-	public void CreateComplexPropertyPostOperationReturnsCorrectOperationForCollection(bool enableOperationId)
+	[InlineData(true, true)]
+	[InlineData(false, true)]
+	[InlineData(true, false)]
+	[InlineData(false, false)]
+	public void CreateComplexPropertyPostOperationReturnsCorrectOperationForCollection(bool enableOperationId, bool useHTTPStatusCodeClass2XX)
 	{
 		// Arrange
 		var model = EntitySetPostOperationHandlerTests.GetEdmModel("");
 		var entitySet = model.EntityContainer.FindEntitySet("Customers");
-		var entity = entitySet.EntityType();
+		var entity = entitySet.EntityType;
 		var property = entity.FindProperty("AlternativeAddresses");
 		var settings = new OpenApiConvertSettings
 		{
-			EnableOperationId = enableOperationId
+			EnableOperationId = enableOperationId,
+			UseSuccessStatusCodeRange = useHTTPStatusCodeClass2XX
 		};
 		var context = new ODataContext(model, settings);
-		var path = new ODataPath(new ODataNavigationSourceSegment(entitySet), new ODataKeySegment(entitySet.EntityType()), new ODataComplexPropertySegment(property as IEdmStructuralProperty));
+		var path = new ODataPath(new ODataNavigationSourceSegment(entitySet), new ODataKeySegment(entitySet.EntityType), new ODataComplexPropertySegment(property as IEdmStructuralProperty));
 
 		// Act
 		var post = _operationHandler.CreateOperation(context, path);
@@ -59,11 +62,21 @@ public class ComplexPropertyPostOperationHandlerTests
 
 		Assert.NotNull(post.Responses);
 		Assert.Equal(2, post.Responses.Count);
-		Assert.Equal(new[] { "204", "default" }, post.Responses.Select(r => r.Key));
+		var statusCode = useHTTPStatusCodeClass2XX ? "2XX" : "204";
+		Assert.Equal(new[] { statusCode, "default" }, post.Responses.Select(r => r.Key));
+
+		if (useHTTPStatusCodeClass2XX)
+		{
+			Assert.Single(post.Responses[statusCode].Content);
+		}
+		else
+		{
+			Assert.Empty(post.Responses[statusCode].Content);
+		}
 
 		if (enableOperationId)
 		{
-			Assert.Equal("AlternativeAddresses.Address.SetAddress", post.OperationId);
+			Assert.Equal("Customers.SetAlternativeAddresses", post.OperationId);
 		}
 		else
 		{

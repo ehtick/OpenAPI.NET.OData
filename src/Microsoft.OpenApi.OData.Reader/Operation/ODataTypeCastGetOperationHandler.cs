@@ -14,6 +14,7 @@ using Microsoft.OpenApi.OData.Common;
 using Microsoft.OpenApi.OData.Edm;
 using Microsoft.OpenApi.OData.Generator;
 using Microsoft.OpenApi.OData.Vocabulary.Capabilities;
+using Microsoft.OpenApi.OData.Vocabulary.Core;
 
 namespace Microsoft.OpenApi.OData.Operation;
 
@@ -29,17 +30,22 @@ internal class ODataTypeCastGetOperationHandler : OperationHandler
 	/// Gets/sets the segment before cast.
 	/// this segment could be "entity set", "Collection property", etc.
 	/// </summary>
-	internal ODataSegment LastSecondSegment { get; set; }
+	internal ODataSegment SecondLastSegment { get; set; }
 
-	private bool isKeySegment;
+    private bool isKeySegment;
+
+	private bool secondLastSegmentIsComplexProperty;
+
 	private bool IsSingleElement 
 	{
 		get => isKeySegment ||
-				singleton != null ||
+				secondLastSegmentIsComplexProperty ||
+                singleton != null ||
 					(navigationProperty != null &&
 					!navigationProperty.Type.IsCollection() &&
 					entitySet == null);
 	}
+
 	private NavigationPropertyRestriction restriction;
 	private IEdmSingleton singleton;
 	private IEdmEntitySet entitySet;
@@ -49,60 +55,77 @@ internal class ODataTypeCastGetOperationHandler : OperationHandler
 	private IEdmStructuredType targetStructuredType;
 	private IEdmSchemaElement TargetSchemaElement => targetStructuredType as IEdmSchemaElement;
 	private const int SecondLastSegmentIndex = 2;
-	/// <inheritdoc/>
-	protected override void Initialize(ODataContext context, ODataPath path)
+	private bool isIndexedCollValuedNavProp = false;
+	private IEdmNavigationSource navigationSource;
+	private IEdmVocabularyAnnotatable annotatable;
+
+    /// <inheritdoc/>
+    protected override void Initialize(ODataContext context, ODataPath path)
 	{
 		// reseting the fields as we're reusing the handler
 		singleton = null;
 		isKeySegment = false;
-		restriction = null;
+		secondLastSegmentIsComplexProperty = false;
+        restriction = null;
 		entitySet = null;
 		navigationProperty = null;
 		parentStructuredType = null;
 		targetStructuredType = null;
+		isIndexedCollValuedNavProp = false;
+		annotatable = null;
 		base.Initialize(context, path);
 
 		// get the last second segment
 		int count = path.Segments.Count;
 		if(count >= SecondLastSegmentIndex)
-			LastSecondSegment = path.Segments.ElementAt(count - SecondLastSegmentIndex);
+			SecondLastSegment = path.Segments.ElementAt(count - SecondLastSegmentIndex);
 
-		parentStructuredType = LastSecondSegment is ODataComplexPropertySegment complexSegment ? complexSegment.ComplexType : LastSecondSegment.EntityType;
-		if(LastSecondSegment is ODataNavigationPropertySegment navigationPropertySegment)
+		parentStructuredType = SecondLastSegment is ODataComplexPropertySegment complexSegment ? complexSegment.ComplexType : SecondLastSegment.EntityType;
+        ODataNavigationSourceSegment navigationSourceSegment = path.FirstSegment as ODataNavigationSourceSegment;
+        navigationSource = navigationSourceSegment.NavigationSource;
+
+		if (SecondLastSegment is ODataNavigationPropertySegment navigationPropertySegment)
 		{
 			SetNavigationPropertyAndRestrictionFromNavigationSegment(navigationPropertySegment, path);
 		}
-		else if(LastSecondSegment is ODataNavigationSourceSegment sourceSegment)
+		else if (SecondLastSegment is ODataNavigationSourceSegment sourceSegment)
 		{
-			if(sourceSegment.NavigationSource is IEdmEntitySet)
-				SetEntitySetAndRestrictionFromSourceSegment(sourceSegment);
-			else if (sourceSegment.NavigationSource is IEdmSingleton)
-				SetSingletonAndRestrictionFromSourceSegment(sourceSegment);
-		}
-		else if(LastSecondSegment is ODataKeySegment)
+			SetAnnotatableRestrictionFromNavigationSourceSegment(sourceSegment);
+        }
+		else if (SecondLastSegment is ODataKeySegment)
 		{
 			isKeySegment = true;
 			var thirdLastSegment = path.Segments.ElementAt(count - SecondLastSegmentIndex - 1);
-			if(thirdLastSegment is ODataNavigationPropertySegment navigationPropertySegment1)
+			if (thirdLastSegment is ODataNavigationPropertySegment navigationPropertySegment1)
 			{
+                isIndexedCollValuedNavProp = true;
 				SetNavigationPropertyAndRestrictionFromNavigationSegment(navigationPropertySegment1, path);
 			}
-			else if(thirdLastSegment is ODataNavigationSourceSegment sourceSegment1)
+			else if (thirdLastSegment is ODataNavigationSourceSegment sourceSegment1)
 			{
-				SetEntitySetAndRestrictionFromSourceSegment(sourceSegment1);
-			}
+				SetAnnotatableRestrictionFromNavigationSourceSegment(sourceSegment1);
+            }
 		}
-		if(path.Last() is ODataTypeCastSegment oDataTypeCastSegment)
+		else if (SecondLastSegment is ODataComplexPropertySegment)
 		{
-			targetStructuredType = oDataTypeCastSegment.StructuredType;
+			secondLastSegmentIsComplexProperty = true;
 		}
-		else throw new NotImplementedException($"type cast type {path.Last().GetType().FullName} not implemented");
-	}
+
+		if (path.Last() is ODataTypeCastSegment odataTypeCastSegment)
+		{
+			targetStructuredType = odataTypeCastSegment.StructuredType;
+		}
+		else 
+		{
+            throw new NotImplementedException($"type cast type {path.Last().GetType().FullName} not implemented");
+        }
+    }
 
 	private void SetNavigationPropertyAndRestrictionFromNavigationSegment(ODataNavigationPropertySegment navigationPropertySegment, ODataPath path)
 	{
 		navigationProperty = navigationPropertySegment.NavigationProperty;
-		var navigationPropertyPath = string.Join("/",
+		annotatable = navigationProperty;
+        var navigationPropertyPath = string.Join("/",
 			Path.Segments.Where(s => !(s is ODataKeySegment || s is ODataNavigationSourceSegment
 									|| s is ODataStreamContentSegment || s is ODataStreamPropertySegment)).Select(e => e.Identifier));
 
@@ -121,28 +144,30 @@ internal class ODataTypeCastGetOperationHandler : OperationHandler
 		}
 	}
 
-	private void SetEntitySetAndRestrictionFromSourceSegment(ODataNavigationSourceSegment sourceSegment)
+    private void SetAnnotatableRestrictionFromNavigationSourceSegment(ODataNavigationSourceSegment sourceSegment)
 	{
-		if(sourceSegment.NavigationSource is IEdmEntitySet eSet)
-		{
+        if (sourceSegment.NavigationSource is IEdmEntitySet eSet)
+        {
+			annotatable = eSet;
 			entitySet = eSet;
-			SetRestrictionFromAnnotable(eSet);
-		}
-	}
-	
-	private void SetSingletonAndRestrictionFromSourceSegment(ODataNavigationSourceSegment sourceSegment)
-	{
-		if(sourceSegment.NavigationSource is IEdmSingleton sTon)
+
+        }
+		else if (sourceSegment.NavigationSource is IEdmSingleton sTon)
 		{
+			annotatable = sTon;
 			singleton = sTon;
-			SetRestrictionFromAnnotable(sTon);
 		}
 
-	}
+        SetRestrictionFromAnnotatable(annotatable);
+    }
+	    
 
-	private void SetRestrictionFromAnnotable(IEdmVocabularyAnnotatable annotable)
+	private void SetRestrictionFromAnnotatable(IEdmVocabularyAnnotatable annotatable)
 	{
-		NavigationRestrictionsType navigation = Context.Model.GetRecord<NavigationRestrictionsType>(annotable, CapabilitiesConstants.NavigationRestrictions);
+		if (this.annotatable == null)
+			return;
+
+		NavigationRestrictionsType navigation = Context.Model.GetRecord<NavigationRestrictionsType>(annotatable, CapabilitiesConstants.NavigationRestrictions);
 		if (navigation?.RestrictedProperties != null)
 		{
 			restriction = navigation.RestrictedProperties.FirstOrDefault(r => r.NavigationProperty == null);
@@ -152,113 +177,97 @@ internal class ODataTypeCastGetOperationHandler : OperationHandler
 	/// <inheritdoc/>
 	protected override void SetBasicInfo(OpenApiOperation operation)
 	{
-		// Summary
-		if(IsSingleElement)
-			operation.Summary = $"Get the item of type {ParentSchemaElement.ShortQualifiedName()} as {TargetSchemaElement.ShortQualifiedName()}";
-		else
-			operation.Summary = $"Get the items of type {TargetSchemaElement.ShortQualifiedName()} in the {ParentSchemaElement.ShortQualifiedName()} collection";
+        ReadRestrictionsType _readRestrictions = Context.Model.GetRecord<ReadRestrictionsType>(TargetPath, CapabilitiesConstants.ReadRestrictions);
 
-		// OperationId
-		if (Context.Settings.EnableOperationId)
-		{
-			var operationItem = IsSingleElement ? ".Item" : ".Items";
-			operation.OperationId = $"Get.{ParentSchemaElement.ShortQualifiedName()}{operationItem}.As.{TargetSchemaElement.ShortQualifiedName()}-{Path.GetPathHash(Context.Settings)}";
-		}
+        // Summary
+        string placeHolder = IsSingleElement 
+			? $"Get the item of type {ParentSchemaElement.ShortQualifiedName()} as {TargetSchemaElement.ShortQualifiedName()}" 
+			: $"Get the items of type {TargetSchemaElement.ShortQualifiedName()} in the {ParentSchemaElement.ShortQualifiedName()} collection";
+        operation.Summary = _readRestrictions?.Description ?? placeHolder;
+        operation.Description = _readRestrictions?.LongDescription;
 
-		base.SetBasicInfo(operation);
+        // OperationId
+        if (Context.Settings.EnableOperationId)
+			operation.OperationId = EdmModelHelper.GenerateODataTypeCastPathOperationIdPrefix(Path, Context) + $".As{Utils.UpperFirstChar(TargetSchemaElement.Name)}";
+
+        base.SetBasicInfo(operation);
 	}
 
 	/// <inheritdoc/>
 	protected override void SetResponses(OpenApiOperation operation)
-	{
-		if(IsSingleElement)
-			SetSingleResponse(operation);
+    {
+        if (IsSingleElement)
+		{
+            OpenApiSchema schema = null;
+
+            if (Context.Settings.EnableDerivedTypesReferencesForResponses)
+            {
+                schema = EdmModelHelper.GetDerivedTypesReferenceSchema(targetStructuredType, Context.Model);
+            }
+
+            if (schema == null)
+            {
+                schema = new OpenApiSchema
+                {
+                    UnresolvedReference = true,
+                    Reference = new OpenApiReference
+                    {
+                        Type = ReferenceType.Schema,
+                        Id = TargetSchemaElement.FullName()
+                    }
+                };
+            }
+
+            SetSingleResponse(operation, schema);
+        }
 		else
-			SetCollectionResponse(operation);
+		{
+            SetCollectionResponse(operation, TargetSchemaElement.FullName());
+        }			
 
 		operation.AddErrorResponses(Context.Settings, false);
 
 		base.SetResponses(operation);
 	}
-	private void SetCollectionResponse(OpenApiOperation operation)
-	{
-		operation.Responses = new OpenApiResponses
-		{
-			{
-				Constants.StatusCode200,
-				new OpenApiResponse
-				{
-					UnresolvedReference = true,
-					Reference = new OpenApiReference()
-					{
-						Type = ReferenceType.Response,
-						Id = $"{TargetSchemaElement.FullName()}{Constants.CollectionSchemaSuffix}"
-					},
-				}
-			}
-		};
-	}
-	private void SetSingleResponse(OpenApiOperation operation)
-	{
-		OpenApiSchema schema = null;
 
-		if (Context.Settings.EnableDerivedTypesReferencesForResponses)
-		{
-			schema = EdmModelHelper.GetDerivedTypesReferenceSchema(targetStructuredType, Context.Model);
-		}
-
-		if (schema == null)
-		{
-			schema = new OpenApiSchema
-			{
-				UnresolvedReference = true,
-				Reference = new OpenApiReference
-				{
-					Type = ReferenceType.Schema,
-					Id = TargetSchemaElement.FullName()
-				}
-			};
-		}
-		operation.Responses = new OpenApiResponses
-		{
-			{
-				Constants.StatusCode200,
-				new OpenApiResponse
-				{
-					Description = "Result entities",
-					Content = new Dictionary<string, OpenApiMediaType>
-					{
-						{
-							Constants.ApplicationJsonMediaType,
-							new OpenApiMediaType
-							{
-								Schema = schema
-							}
-						}
-					},
-				}
-			}
-		};
-	}
 	/// <inheritdoc/>
 	protected override void SetTags(OpenApiOperation operation)
 	{
-		IList<string> items = new List<string>
-		{
-			ParentSchemaElement.Name,
-			TargetSchemaElement.Name,
-		};
+        string tagName = null;
 
-		string name = string.Join(".", items);
-		OpenApiTag tag = new()
+        if (SecondLastSegment is ODataNavigationPropertySegment || isIndexedCollValuedNavProp)
 		{
-			Name = name
-		};
-		if(!IsSingleElement)
-			tag.Extensions.Add(Constants.xMsTocType, new OpenApiString("page"));
-		operation.Tags.Add(tag);
+			tagName = EdmModelHelper.GenerateNavigationPropertyPathTagName(Path, Context);
+		}
+		else if ((SecondLastSegment is ODataKeySegment && !isIndexedCollValuedNavProp)
+				|| (SecondLastSegment is ODataNavigationSourceSegment))
+		{
+            var entitySet = navigationSource as IEdmEntitySet;
+            var singleton = navigationSource as IEdmSingleton;
 
-		Context.AppendTag(tag);
+			tagName = entitySet != null
+                ? entitySet.Name + "." + entitySet.EntityType.Name
+                : singleton.Name + "." + singleton.EntityType.Name;
+        }
+		else if (SecondLastSegment is ODataComplexPropertySegment)
+		{
+            tagName = EdmModelHelper.GenerateComplexPropertyPathTagName(Path, Context);			
+        }
+
+		if (tagName != null)
+		{
+			OpenApiTag tag = new()
+			{
+				Name = tagName
+			};
+
+			if (!IsSingleElement)
+				tag.Extensions.Add(Constants.xMsTocType, new OpenApiString("page"));
+
+			operation.Tags.Add(tag);
+
+			Context.AppendTag(tag);
+		}		
 
 		base.SetTags(operation);
 	}
@@ -271,8 +280,8 @@ internal class ODataTypeCastGetOperationHandler : OperationHandler
 			if (IsSingleElement)
 			{
 				new OpenApiParameter[] {
-						Context.CreateSelect(navigationProperty),
-						Context.CreateExpand(navigationProperty),
+                        Context.CreateSelect(TargetPath, navigationProperty.ToEntityType()) ?? Context.CreateSelect(navigationProperty),
+                        Context.CreateExpand(TargetPath, navigationProperty.ToEntityType()) ?? Context.CreateExpand(navigationProperty),
 					}
 				.Where(x => x != null)
 				.ToList()
@@ -283,9 +292,9 @@ internal class ODataTypeCastGetOperationHandler : OperationHandler
 				GetParametersForAnnotableOfMany(navigationProperty)
 				.Union(
 					new OpenApiParameter[] {
-						Context.CreateOrderBy(navigationProperty),
-						Context.CreateSelect(navigationProperty),
-						Context.CreateExpand(navigationProperty),
+                        Context.CreateOrderBy(TargetPath, navigationProperty.ToEntityType()) ?? Context.CreateOrderBy(navigationProperty),
+                        Context.CreateSelect(TargetPath, navigationProperty.ToEntityType()) ?? Context.CreateSelect(navigationProperty),
+                        Context.CreateExpand(TargetPath, navigationProperty.ToEntityType()) ?? Context.CreateExpand(navigationProperty),
 					})
 				.Where(x => x != null)
 				.ToList()
@@ -297,8 +306,8 @@ internal class ODataTypeCastGetOperationHandler : OperationHandler
 			if(IsSingleElement)
 			{
 				new OpenApiParameter[] {
-						Context.CreateSelect(entitySet),
-						Context.CreateExpand(entitySet),
+                        Context.CreateSelect(TargetPath, entitySet.EntityType) ?? Context.CreateSelect(entitySet),
+                        Context.CreateExpand(TargetPath, entitySet.EntityType) ?? Context.CreateExpand(entitySet),
 					}
 				.Where(x => x != null)
 				.ToList()
@@ -309,9 +318,9 @@ internal class ODataTypeCastGetOperationHandler : OperationHandler
 				GetParametersForAnnotableOfMany(entitySet)
 				.Union(
 					new OpenApiParameter[] {
-						Context.CreateOrderBy(entitySet),
-						Context.CreateSelect(entitySet),
-						Context.CreateExpand(entitySet),
+                        Context.CreateOrderBy(TargetPath, entitySet.EntityType) ?? Context.CreateOrderBy(entitySet),
+                        Context.CreateSelect(TargetPath, entitySet.EntityType) ?? Context.CreateSelect(entitySet),
+                        Context.CreateExpand(TargetPath, entitySet.EntityType) ?? Context.CreateExpand(entitySet),
 					})
 				.Where(x => x != null)
 				.ToList()
@@ -321,8 +330,8 @@ internal class ODataTypeCastGetOperationHandler : OperationHandler
 		else if(singleton != null)
 		{
 			new OpenApiParameter[] {
-					Context.CreateSelect(singleton),
-					Context.CreateExpand(singleton),
+                    Context.CreateSelect(TargetPath, singleton.EntityType) ?? Context.CreateSelect(singleton),
+                    Context.CreateExpand(TargetPath, singleton.EntityType) ?? Context.CreateExpand(singleton),
 				}
 			.Where(x => x != null)
 			.ToList()
@@ -334,7 +343,7 @@ internal class ODataTypeCastGetOperationHandler : OperationHandler
 		// Need to verify that TopSupported or others should be applied to navigation source.
 		// So, how about for the navigation property.
 		return new OpenApiParameter[] {
-			Context.CreateTop(annotable),
+            Context.CreateTop(annotable),
 			Context.CreateSkip(annotable),
 			Context.CreateSearch(annotable),
 			Context.CreateFilter(annotable),
@@ -369,4 +378,42 @@ internal class ODataTypeCastGetOperationHandler : OperationHandler
 
 		base.SetExtensions(operation);
 	}
+
+    protected override void AppendCustomParameters(OpenApiOperation operation)
+    {
+		if (annotatable == null)
+			return;
+
+        ReadRestrictionsType readRestrictions = Context.Model.GetRecord<ReadRestrictionsType>(TargetPath, CapabilitiesConstants.ReadRestrictions);
+        var annotatableReadRestrictions = Context.Model.GetRecord<ReadRestrictionsType>(annotatable, CapabilitiesConstants.ReadRestrictions);
+        readRestrictions?.MergePropertiesIfNull(annotatableReadRestrictions);
+        readRestrictions ??= annotatableReadRestrictions;
+
+        if (readRestrictions == null)
+        {
+            return;
+        }
+
+        if (readRestrictions.CustomHeaders != null)
+        {
+            AppendCustomParameters(operation, readRestrictions.CustomHeaders, ParameterLocation.Header);
+        }
+
+        if (readRestrictions.CustomQueryOptions != null)
+        {
+            AppendCustomParameters(operation, readRestrictions.CustomQueryOptions, ParameterLocation.Query);
+        }
+    }
+
+    protected override void SetExternalDocs(OpenApiOperation operation)
+    {
+        if (Context.Settings.ShowExternalDocs && Context.Model.GetLinkRecord(TargetPath, CustomLinkRel) is LinkType externalDocs)
+        {
+            operation.ExternalDocs = new OpenApiExternalDocs()
+            {
+                Description = CoreConstants.ExternalDocsDescription,
+                Url = externalDocs.Href
+            };
+        }
+    }
 }

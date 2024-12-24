@@ -22,7 +22,8 @@ namespace Microsoft.OpenApi.OData.Generator.Tests
             IEdmModel model = EdmModelHelper.GraphBetaModel;
             OpenApiConvertSettings settings = new()
             {
-                ShowLinks = true
+                ShowLinks = true,
+                GenerateDerivedTypesProperties = false
             };
             ODataContext context = new(model, settings);
             IEdmSingleton admin = model.EntityContainer.FindSingleton("admin");
@@ -70,7 +71,8 @@ namespace Microsoft.OpenApi.OData.Generator.Tests
             IEdmModel model = EdmModelHelper.GraphBetaModel;
             OpenApiConvertSettings settings = new()
             {
-                ShowLinks = true
+                ShowLinks = true,
+                GenerateDerivedTypesProperties = false
             };
             ODataContext context = new(model, settings);
             IEdmSingleton singleton = model.EntityContainer.FindSingleton("admin");
@@ -137,7 +139,8 @@ namespace Microsoft.OpenApi.OData.Generator.Tests
             IEdmModel model = EdmModelHelper.GraphBetaModel;
             OpenApiConvertSettings settings = new()
             {
-                ShowLinks = true
+                ShowLinks = true,
+                GenerateDerivedTypesProperties = false
             };
             ODataContext context = new(model, settings);
             IEdmSingleton singleton = model.EntityContainer.FindSingleton("admin");
@@ -148,19 +151,34 @@ namespace Microsoft.OpenApi.OData.Generator.Tests
 
             // Act
             IDictionary<string, OpenApiLink> links = context.CreateLinks(
-                entityType: singleton.EntityType(),
+                entityType: singleton.EntityType,
                 entityName: singleton.Name,
                 entityKind: singleton.ContainerElementKind.ToString(),
                 path: path);
 
             // Assert
             Assert.NotNull(links);
-            Assert.Equal(2, links.Count);
+            Assert.Equal(5, links.Count);
             Assert.Collection(links,
+                item =>
+                {
+                    Assert.Equal("edge", item.Key);
+                    Assert.Equal("admin.GetEdge", item.Value.OperationId);
+                },
+                item =>
+                {
+                Assert.Equal("sharepoint", item.Key);
+                Assert.Equal("admin.GetSharepoint", item.Value.OperationId);
+                },
                 item =>
                 {
                     Assert.Equal("serviceAnnouncement", item.Key);
                     Assert.Equal("admin.GetServiceAnnouncement", item.Value.OperationId);
+                },
+                item =>
+                {
+                Assert.Equal("reportSettings", item.Key);
+                Assert.Equal("admin.GetReportSettings", item.Value.OperationId);
                 },
                 item =>
                 {
@@ -176,7 +194,8 @@ namespace Microsoft.OpenApi.OData.Generator.Tests
             IEdmModel model = EdmModelHelper.GraphBetaModel;
             OpenApiConvertSettings settings = new()
             {
-                ShowLinks = true
+                ShowLinks = true,
+                GenerateDerivedTypesProperties = false
             };
             ODataContext context = new(model, settings);
             IEdmEntitySet entityset = model.EntityContainer.FindEntitySet("agreements");
@@ -184,7 +203,7 @@ namespace Microsoft.OpenApi.OData.Generator.Tests
 
             ODataPath path = new(
                 new ODataNavigationSourceSegment(entityset),
-                new ODataKeySegment(entityset.EntityType()));
+                new ODataKeySegment(entityset.EntityType));
 
             var parameters = new List<OpenApiParameter>()
             {
@@ -203,7 +222,7 @@ namespace Microsoft.OpenApi.OData.Generator.Tests
 
             // Act
             IDictionary<string, OpenApiLink> links = context.CreateLinks(
-                entityType: entityset.EntityType(),
+                entityType: entityset.EntityType,
                 entityName: entityset.Name,
                 entityKind: entityset.ContainerElementKind.ToString(),
                 path: path,

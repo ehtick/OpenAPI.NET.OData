@@ -3,6 +3,7 @@
 //  Licensed under the MIT License (MIT). See LICENSE in the repo root for license information.
 // ------------------------------------------------------------
 
+using System;
 using System.Linq;
 using Microsoft.OData.Edm;
 using Microsoft.OData.Edm.Vocabularies;
@@ -21,37 +22,44 @@ namespace Microsoft.OpenApi.OData.Operation
     {
         /// <inheritdoc/>
         public override OperationType OperationType => OperationType.Put;
+        
+        private UpdateRestrictionsType _updateRestrictions = null;
+
+        protected override void Initialize(ODataContext context, ODataPath path)
+        {
+            base.Initialize(context, path);
+
+            if (Property != null)
+            {
+                _updateRestrictions = Context.Model.GetRecord<UpdateRestrictionsType>(TargetPath, CapabilitiesConstants.UpdateRestrictions);
+                if (Property is IEdmNavigationProperty)
+                {
+                    var navigationUpdateRestrictions = Context.Model.GetRecord<NavigationRestrictionsType>(Property, CapabilitiesConstants.NavigationRestrictions)?
+                            .RestrictedProperties?.FirstOrDefault()?.UpdateRestrictions;
+                    _updateRestrictions?.MergePropertiesIfNull(navigationUpdateRestrictions);
+                    _updateRestrictions ??= navigationUpdateRestrictions;
+                }
+                else
+                {
+                    var propertyUpdateRestrictions = Context.Model.GetRecord<UpdateRestrictionsType>(Property, CapabilitiesConstants.UpdateRestrictions);
+                    _updateRestrictions?.MergePropertiesIfNull(propertyUpdateRestrictions);
+                    _updateRestrictions ??= propertyUpdateRestrictions;
+                }
+            }
+        }
 
         /// <inheritdoc/>
         protected override void SetBasicInfo(OpenApiOperation operation)
         {
             // Summary
             string placeholderValue = LastSegmentIsStreamPropertySegment ? Path.LastSegment.Identifier : "media content";
-            operation.Summary = IsNavigationPropertyPath
-                ? $"Update {placeholderValue} for the navigation property {NavigationProperty.Name} in {NavigationSource.Name}"
+            operation.Summary = _updateRestrictions?.Description;
+            operation.Summary ??= IsNavigationPropertyPath
+                ? $"Update {placeholderValue} for the navigation property {NavigationProperty.Name} in {NavigationSourceSegment.NavigationSource.Name}"
                 : $"Update {placeholderValue} for {NavigationSourceSegment.EntityType.Name} in {NavigationSourceSegment.Identifier}";
 
             // Description
-            if (LastSegmentIsStreamPropertySegment)
-            {
-                IEdmVocabularyAnnotatable annotatable = GetAnnotatableElement();
-                string description;
-
-                if (annotatable is IEdmNavigationProperty)
-                {
-                    UpdateRestrictionsType updateRestriction = Context.Model.GetRecord<NavigationRestrictionsType>(annotatable, CapabilitiesConstants.NavigationRestrictions)?
-                        .RestrictedProperties?.FirstOrDefault()?.UpdateRestrictions;
-
-                    description = updateRestriction?.Description ?? Context.Model.GetDescriptionAnnotation(annotatable);
-                }
-                else
-                {
-                    // Structural property
-                    description = Context.Model.GetDescriptionAnnotation(annotatable);
-                }
-
-                operation.Description = description;
-            }
+             operation.Description = _updateRestrictions?.LongDescription ?? Context.Model.GetDescriptionAnnotation(Property);
 
             // OperationId
             if (Context.Settings.EnableOperationId)
@@ -77,7 +85,28 @@ namespace Microsoft.OpenApi.OData.Operation
         /// <inheritdoc/>
         protected override void SetResponses(OpenApiOperation operation)
         {
-            operation.AddErrorResponses(Context.Settings, true);
+            if (LastSegmentIsStreamPropertySegment && Path.LastSegment.Identifier.Equals(Constants.Content, StringComparison.OrdinalIgnoreCase))
+            {
+                // Get the entity type declaring this stream property.
+                (var entityType, _) = GetStreamElements();
+
+                OpenApiSchema schema = new()
+                {
+                    UnresolvedReference = true,
+                    Reference = new OpenApiReference
+                    {
+                        Type = ReferenceType.Schema,
+                        Id = entityType.FullName()
+                    }
+                };
+
+                operation.AddErrorResponses(Context.Settings, addNoContent: true, schema: schema);
+            }
+            else
+            {
+                operation.AddErrorResponses(Context.Settings, true);
+            }
+            
             base.SetResponses(operation);
         }
 
@@ -92,6 +121,25 @@ namespace Microsoft.OpenApi.OData.Operation
             }
 
             operation.Security = Context.CreateSecurityRequirements(update.Permissions).ToList();
+        }
+
+        /// <inheritdoc/>
+        protected override void AppendCustomParameters(OpenApiOperation operation)
+        {
+            if (_updateRestrictions == null)
+            {
+                return;
+            }
+
+            if (_updateRestrictions.CustomHeaders != null)
+            {
+                AppendCustomParameters(operation, _updateRestrictions.CustomHeaders, ParameterLocation.Header);
+            }
+
+            if (_updateRestrictions.CustomQueryOptions != null)
+            {
+                AppendCustomParameters(operation, _updateRestrictions.CustomQueryOptions, ParameterLocation.Query);
+            }
         }
     }
 }

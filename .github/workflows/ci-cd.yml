@@ -2,6 +2,9 @@ name: CI/CD Pipeline
 
 on: [push, pull_request, workflow_dispatch]
 
+permissions:
+  contents: write
+
 jobs:
   ci:
     name: Continuous Integration
@@ -14,9 +17,9 @@ jobs:
       GITHUB_RUN_NUMBER: ${{ github.run_number }}
     steps:
       - name: Setup .NET
-        uses: actions/setup-dotnet@v2
+        uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 6.0.x
+          dotnet-version: 8.0.x
 
       - name: Data gatherer
         id: data_gatherer
@@ -25,7 +28,7 @@ jobs:
           # Get default branch
           $repo = 'microsoft/OpenAPI.NET.OData'
           $defaultBranch = Invoke-RestMethod -Method GET -Uri https://api.github.com/repos/$repo | Select-Object -ExpandProperty default_branch
-          Write-Output "::set-output name=default_branch::$(echo $defaultBranch)"
+          Write-Output "default_branch=$(echo $defaultBranch) >> $GITHUB_OUTPUT"
 
       - name: Conditionals handler
         id: conditionals_handler
@@ -37,11 +40,11 @@ jobs:
           if ( $githubRef -like "*$defaultBranch*" ) {
             $isDefaultBranch = 'true'
           }
-          Write-Output "::set-output name=is_default_branch::$(echo $isDefaultBranch)"
+          Write-Output "is_default_branch=$(echo $isDefaultBranch) >> $GITHUB_OUTPUT"
 
       - name: Checkout repository
         id: checkout_repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
@@ -49,7 +52,7 @@ jobs:
       - if: steps.conditionals_handler.outputs.is_default_branch == 'true'
         name: Bump GH tag
         id: tag_generator
-        uses: mathieudutour/github-tag-action@v6.0
+        uses: mathieudutour/github-tag-action@v6.2
         with: 
           github_token: ${{ secrets.GITHUB_TOKEN }}
           default_bump: false
@@ -126,7 +129,7 @@ jobs:
 
       - name: Create and publish release
         id: create_release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           name: OpenAPI.Net.OData v${{ needs.ci.outputs.latest_version }}
           tag_name: v${{ needs.ci.outputs.latest_version }}

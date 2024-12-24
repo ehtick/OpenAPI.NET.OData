@@ -16,16 +16,17 @@ namespace Microsoft.OpenApi.OData.Operation;
 
 internal abstract class ComplexPropertyUpdateOperationHandler : ComplexPropertyBaseOperationHandler
 {
-    /// <summary>
-    /// Gets/Sets the <see cref="UpdateRestrictionsType"/>
-    /// </summary>
-    private UpdateRestrictionsType UpdateRestrictions { get; set; }
+    
+    private UpdateRestrictionsType _updateRestrictions;
 
     protected override void Initialize(ODataContext context, ODataPath path)
     {
         base.Initialize(context, path);
 
-        UpdateRestrictions = Context.Model.GetRecord<UpdateRestrictionsType>(ComplexPropertySegment.Property, CapabilitiesConstants.UpdateRestrictions);
+        _updateRestrictions = Context.Model.GetRecord<UpdateRestrictionsType>(TargetPath, CapabilitiesConstants.UpdateRestrictions);
+        var complexPropertyUpdateRestrictions = Context.Model.GetRecord<UpdateRestrictionsType>(ComplexPropertySegment.Property, CapabilitiesConstants.UpdateRestrictions);
+        _updateRestrictions?.MergePropertiesIfNull(complexPropertyUpdateRestrictions);
+        _updateRestrictions ??= complexPropertyUpdateRestrictions;
     }
 
     /// <inheritdoc/>
@@ -33,45 +34,20 @@ internal abstract class ComplexPropertyUpdateOperationHandler : ComplexPropertyB
     {
         // Summary and Description
         string placeHolder = $"Update property {ComplexPropertySegment.Property.Name} value.";
-        operation.Summary = UpdateRestrictions?.Description ?? placeHolder;
-        operation.Description = UpdateRestrictions?.LongDescription;
+        operation.Summary = _updateRestrictions?.Description ?? placeHolder;
+        operation.Description = _updateRestrictions?.LongDescription;
 
         // OperationId
         if (Context.Settings.EnableOperationId)
         {
-            string typeName = ComplexPropertySegment.ComplexType.Name;
-            operation.OperationId = ComplexPropertySegment.Property.Name + "." + typeName + ".Update" + Utils.UpperFirstChar(typeName);
+            string prefix = OperationType == OperationType.Patch ? "Update" : "Set";
+            operation.OperationId = EdmModelHelper.GenerateComplexPropertyPathOperationId(Path, Context, prefix);
         }
     }
 
     /// <inheritdoc/>
     protected override void SetRequestBody(OpenApiOperation operation)
     {
-        OpenApiSchema schema =  ComplexPropertySegment.Property.Type.IsCollection() ?
-            new OpenApiSchema
-            {
-                Type = "array",
-                Items = new OpenApiSchema
-                {
-                    UnresolvedReference = true,
-                    Reference = new OpenApiReference
-                    {
-                        Type = ReferenceType.Schema,
-                        Id = ComplexPropertySegment.ComplexType.FullName()
-                    }
-                }
-            }
-        :
-            new OpenApiSchema
-            {
-                UnresolvedReference = true,
-                Reference = new OpenApiReference
-                {
-                    Type = ReferenceType.Schema,
-                    Id = ComplexPropertySegment.ComplexType.FullName()
-                }
-            };
-
         operation.RequestBody = new OpenApiRequestBody
         {
             Required = true,
@@ -81,7 +57,7 @@ internal abstract class ComplexPropertyUpdateOperationHandler : ComplexPropertyB
                 {
                     Constants.ApplicationJsonMediaType, new OpenApiMediaType
                     {
-                        Schema = schema
+                        Schema = GetOpenApiSchema()
                     }
                 }
             }
@@ -93,34 +69,70 @@ internal abstract class ComplexPropertyUpdateOperationHandler : ComplexPropertyB
     /// <inheritdoc/>
     protected override void SetResponses(OpenApiOperation operation)
     {
-        operation.AddErrorResponses(Context.Settings, true);
+        operation.AddErrorResponses(Context.Settings, true, GetOpenApiSchema());
         base.SetResponses(operation);
     }
     protected override void SetSecurity(OpenApiOperation operation)
     {
-        if (UpdateRestrictions?.Permissions == null)
+        if (_updateRestrictions?.Permissions == null)
         {
             return;
         }
 
-        operation.Security = Context.CreateSecurityRequirements(UpdateRestrictions.Permissions).ToList();
+        operation.Security = Context.CreateSecurityRequirements(_updateRestrictions.Permissions).ToList();
     }
 
     protected override void AppendCustomParameters(OpenApiOperation operation)
     {
-        if (UpdateRestrictions == null)
+        if (_updateRestrictions == null)
         {
             return;
         }
 
-        if (UpdateRestrictions.CustomHeaders != null)
+        if (_updateRestrictions.CustomHeaders != null)
         {
-            AppendCustomParameters(operation, UpdateRestrictions.CustomHeaders, ParameterLocation.Header);
+            AppendCustomParameters(operation, _updateRestrictions.CustomHeaders, ParameterLocation.Header);
         }
 
-        if (UpdateRestrictions.CustomQueryOptions != null)
+        if (_updateRestrictions.CustomQueryOptions != null)
         {
-            AppendCustomParameters(operation, UpdateRestrictions.CustomQueryOptions, ParameterLocation.Query);
+            AppendCustomParameters(operation, _updateRestrictions.CustomQueryOptions, ParameterLocation.Query);
+        }
+    }
+
+    private OpenApiSchema GetOpenApiSchema()
+    {
+        var schema = new OpenApiSchema
+        {
+            UnresolvedReference = true,
+            Reference = new OpenApiReference
+            {
+                Type = ReferenceType.Schema,
+                Id = ComplexPropertySegment.ComplexType.FullName()
+            }
+        };
+
+        if (ComplexPropertySegment.Property.Type.IsCollection())
+        {
+            return new OpenApiSchema
+            {
+                Type = Constants.ObjectType,
+                Properties = new Dictionary<string, OpenApiSchema>
+                {
+                    {
+                        "value",
+                        new OpenApiSchema
+                        {
+                            Type = "array",
+                            Items = schema
+                        }
+                    }
+                }
+            };
+        }
+        else
+        {
+            return schema;
         }
     }
 }

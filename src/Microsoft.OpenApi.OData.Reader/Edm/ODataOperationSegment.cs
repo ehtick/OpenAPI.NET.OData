@@ -1,9 +1,9 @@
-// ------------------------------------------------------------
+// -----
+// private readonly IEdmModel _model;-------------------------------------------------------
 //  Copyright (c) Microsoft Corporation.  All rights reserved.
 //  Licensed under the MIT License (MIT). See LICENSE in the repo root for license information.
 // ------------------------------------------------------------
 
-using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -50,6 +50,31 @@ namespace Microsoft.OpenApi.OData.Edm
         }
 
         /// <summary>
+        /// Initializes a new instance of <see cref="ODataOperationSegment"/> class.
+        /// </summary>
+        /// <param name="operation">The operation.</param>
+        /// <param name="model">The Edm model.</param>
+        public ODataOperationSegment(IEdmOperation operation, IEdmModel model)
+            : this(operation, false, model)
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of <see cref="ODataOperationSegment"/> class.
+        /// </summary>
+        /// <param name="operation">The operation.</param>
+        /// <param name="isEscapedFunction">A value indicating this operation is an escaped function.</param>
+        /// <param name="model">The Edm model.</param>
+        public ODataOperationSegment(IEdmOperation operation, bool isEscapedFunction, IEdmModel model)
+        {
+            Operation = operation ?? throw Error.ArgumentNull(nameof(operation));
+            IsEscapedFunction = isEscapedFunction;
+            _model = model ?? throw Error.ArgumentNull(nameof(model));
+        }
+        
+        private readonly IEdmModel _model;
+        
+        /// <summary>
         /// Gets the parameter mappings.
         /// </summary>
         public IDictionary<string, string> ParameterMappings { get; }
@@ -83,7 +108,7 @@ namespace Microsoft.OpenApi.OData.Edm
                 return FunctionName(Operation as IEdmFunction, settings, parameters);
             }
 
-            return ActionName(Operation as IEdmAction, settings);
+            return OperationName(Operation, settings);
         }
 
         internal IDictionary<string, string> GetNameMapping(OpenApiConvertSettings settings, HashSet<string> parameters)
@@ -111,6 +136,22 @@ namespace Microsoft.OpenApi.OData.Edm
             return parameterNamesMapping;
         }
 
+        private string OperationName(IEdmOperation operation, OpenApiConvertSettings settings)
+        {
+            if (settings.EnableUnqualifiedCall)
+            {
+                return operation.Name;
+            }
+            else if (_model != null)
+            {
+                return EdmModelHelper.StripOrAliasNamespacePrefix(operation, settings, _model);
+            }
+            else
+            {
+                return operation.FullName();
+            }
+        }
+
         private string FunctionName(IEdmFunction function, OpenApiConvertSettings settings, HashSet<string> parameters)
         {
             if (settings.EnableUriEscapeFunctionCall && IsEscapedFunction)
@@ -129,15 +170,8 @@ namespace Microsoft.OpenApi.OData.Edm
                 }
             }
 
-            StringBuilder functionName = new StringBuilder();
-            if (settings.EnableUnqualifiedCall)
-            {
-                functionName.Append(function.Name);
-            }
-            else
-            {
-                functionName.Append(function.FullName());
-            }
+            StringBuilder functionName = new();
+            functionName.Append(OperationName(function, settings));
             functionName.Append("(");
             
             int skip = function.IsBound ? 1 : 0;
@@ -145,7 +179,9 @@ namespace Microsoft.OpenApi.OData.Edm
             {
                 string uniqueName = Utils.GetUniqueName(p.Name, parameters);
                 var quote = p.Type.Definition.ShouldPathParameterBeQuoted(settings) ? "'" : string.Empty;
-                return p.Name + $"={quote}{{{uniqueName}}}{quote}";
+                return p is IEdmOptionalParameter
+                    ? p.Name + $"={quote}@{uniqueName}{quote}"
+                    : p.Name + $"={quote}{{{uniqueName}}}{quote}";
             })));
 
             functionName.Append(")");
@@ -153,22 +189,10 @@ namespace Microsoft.OpenApi.OData.Edm
             return functionName.ToString();
         }
 
-        private string ActionName(IEdmAction action, OpenApiConvertSettings settings)
-        {
-            if (settings.EnableUnqualifiedCall)
-            {
-                return action.Name;
-            }
-            else
-            {
-                return action.FullName();
-            }
-        }
-
         /// <inheritdoc />
 		public override IEnumerable<IEdmVocabularyAnnotatable> GetAnnotables()
 		{
 			return new IEdmVocabularyAnnotatable[] { Operation };
 		}
-	}
+    }
 }

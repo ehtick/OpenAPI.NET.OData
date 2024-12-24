@@ -70,5 +70,9 @@ Indicate to output file name.
 
 `OoasUtil.exe -j -k -drs -drq -p -u -s 3 -i http://services.odata.org/TrippinRESTierService -o trip.json`
 
-The content of `trip.json` is similar at https://github.com/xuzhg/OData.OpenAPI/blob/master/Microsoft.OData.OpenAPI/Microsoft.OData.OpenAPI.Tests/Resources/TripService.OpenApi.json
+The content of `trip.json` is similar at https://github.com/xuzhg/OData.OpenAPI/blob/main/Microsoft.OData.OpenAPI/Microsoft.OData.OpenAPI.Tests/Resources/TripService.OpenApi.json
+
+# Alternative Tool - Hidi
+
+This OoasUtil Command tool is currently not actively maintained, and an alternative command line tool, Hidi, is available for use in converting CSDL to OpenAPI. You can find the link to its README [here](https://github.com/microsoft/OpenAPI.NET/blob/vnext/src/Microsoft.OpenApi.Hidi/readme.md) which includes setup instructions.
 

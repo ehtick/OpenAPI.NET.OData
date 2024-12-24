@@ -19,110 +19,141 @@ namespace Microsoft.OpenApi.OData.Operation
     /// </summary>
     internal abstract class EntityUpdateOperationHandler : EntitySetOperationHandler
     {
-        /// <summary>
-        /// Gets/Sets the <see cref="UpdateRestrictionsType"/>
-        /// </summary>
-        private UpdateRestrictionsType UpdateRestrictions { get; set; }
+        private UpdateRestrictionsType _updateRestrictions;
 
         protected override void Initialize(ODataContext context, ODataPath path)
         {
             base.Initialize(context, path);
 
-            UpdateRestrictions = Context.Model.GetRecord<UpdateRestrictionsType>(EntitySet, CapabilitiesConstants.UpdateRestrictions);
+            _updateRestrictions = Context.Model.GetRecord<UpdateRestrictionsType>(TargetPath, CapabilitiesConstants.UpdateRestrictions);
+            var entityUpdateRestrictions = Context.Model.GetRecord<UpdateRestrictionsType>(EntitySet, CapabilitiesConstants.UpdateRestrictions);
+            _updateRestrictions?.MergePropertiesIfNull(entityUpdateRestrictions);
+            _updateRestrictions ??= entityUpdateRestrictions;
         }
 
         /// <inheritdoc/>
         protected override void SetBasicInfo(OpenApiOperation operation)
         {
-            IEdmEntityType entityType = EntitySet.EntityType();
+            IEdmEntityType entityType = EntitySet.EntityType;
+            ODataKeySegment keySegment = Path.LastSegment as ODataKeySegment;
 
             // Summary and Description
             string placeHolder = "Update entity in " + EntitySet.Name;
-            operation.Summary = UpdateRestrictions?.Description ?? placeHolder;
-            operation.Description = UpdateRestrictions?.LongDescription;
+            if (keySegment.IsAlternateKey)
+            {
+                placeHolder = $"{placeHolder} by {keySegment.Identifier}";
+            }
+            operation.Summary = _updateRestrictions?.Description ?? placeHolder;
+            operation.Description = _updateRestrictions?.LongDescription;
 
             // OperationId
             if (Context.Settings.EnableOperationId)
             {
                 string typeName = entityType.Name;
-                operation.OperationId = EntitySet.Name + "." + typeName + ".Update" + Utils.UpperFirstChar(typeName);
+                string prefix = OperationType == OperationType.Patch ? "Update" : "Set";
+                string operationName = $"{prefix}{ Utils.UpperFirstChar(typeName)}";
+                if (keySegment.IsAlternateKey)
+                {
+                    string alternateKeyName = string.Join("", keySegment.Identifier.Split(',').Select(static x => Utils.UpperFirstChar(x)));
+                    operationName = $"{operationName}By{alternateKeyName}";
+                }
+                operation.OperationId = $"{EntitySet.Name}.{typeName}.{operationName}";
             }
         }
 
         /// <inheritdoc/>
         protected override void SetRequestBody(OpenApiOperation operation)
         {
-            OpenApiSchema schema = null;
-
-            if (Context.Settings.EnableDerivedTypesReferencesForRequestBody)
-            {
-                schema = EdmModelHelper.GetDerivedTypesReferenceSchema(EntitySet.EntityType(), Context.Model);
-            }
-
-            if (schema == null)
-            {
-                schema = new OpenApiSchema
-                {
-                    UnresolvedReference = true,
-                    Reference = new OpenApiReference
-                    {
-                        Type = ReferenceType.Schema,
-                        Id = EntitySet.EntityType().FullName()
-                    }
-                };
-            }
-
             operation.RequestBody = new OpenApiRequestBody
             {
                 Required = true,
                 Description = "New property values",
-                Content = new Dictionary<string, OpenApiMediaType>
-                {
-                    {
-                        Constants.ApplicationJsonMediaType, new OpenApiMediaType
-                        {
-                            Schema = schema
-                        }
-                    }
-                }
+                Content = GetContent()
             };
 
             base.SetRequestBody(operation);
         }
 
+        protected IDictionary<string, OpenApiMediaType> GetContent()
+        {
+            OpenApiSchema schema = GetOpenApiSchema();
+            var content = new Dictionary<string, OpenApiMediaType>();
+            IEnumerable<string> mediaTypes = _updateRestrictions?.RequestContentTypes;
+
+            // Add the annotated request content media types
+            if (mediaTypes != null)
+            {
+                foreach (string mediaType in mediaTypes)
+                {
+                    content.Add(mediaType, new OpenApiMediaType
+                    {
+                        Schema = schema
+                    });
+                }
+            }
+            else
+            {
+                // Default content type
+                content.Add(Constants.ApplicationJsonMediaType, new OpenApiMediaType
+                {
+                    Schema = schema
+                });
+            };
+
+            return content;
+        }
+
         /// <inheritdoc/>
         protected override void SetResponses(OpenApiOperation operation)
         {
-            operation.AddErrorResponses(Context.Settings, true);
+            operation.AddErrorResponses(Context.Settings, true, GetOpenApiSchema());
             base.SetResponses(operation);
         }
 
         protected override void SetSecurity(OpenApiOperation operation)
         {
-            if (UpdateRestrictions?.Permissions == null)
+            if (_updateRestrictions?.Permissions == null)
             {
                 return;
             }
 
-            operation.Security = Context.CreateSecurityRequirements(UpdateRestrictions.Permissions).ToList();
+            operation.Security = Context.CreateSecurityRequirements(_updateRestrictions.Permissions).ToList();
         }
 
         protected override void AppendCustomParameters(OpenApiOperation operation)
         {
-            if (UpdateRestrictions == null)
+            if (_updateRestrictions == null)
             {
                 return;
             }
 
-            if (UpdateRestrictions.CustomHeaders != null)
+            if (_updateRestrictions.CustomHeaders != null)
             {
-                AppendCustomParameters(operation, UpdateRestrictions.CustomHeaders, ParameterLocation.Header);
+                AppendCustomParameters(operation, _updateRestrictions.CustomHeaders, ParameterLocation.Header);
             }
 
-            if (UpdateRestrictions.CustomQueryOptions != null)
+            if (_updateRestrictions.CustomQueryOptions != null)
             {
-                AppendCustomParameters(operation, UpdateRestrictions.CustomQueryOptions, ParameterLocation.Query);
+                AppendCustomParameters(operation, _updateRestrictions.CustomQueryOptions, ParameterLocation.Query);
             }
+        }
+
+        private OpenApiSchema GetOpenApiSchema()
+        {
+            if (Context.Settings.EnableDerivedTypesReferencesForRequestBody)
+            {
+                return EdmModelHelper.GetDerivedTypesReferenceSchema(EntitySet.EntityType, Context.Model);
+            }
+
+            return new OpenApiSchema
+            {
+                UnresolvedReference = true,
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.Schema,
+                    Id = EntitySet.EntityType.FullName()
+                }
+            };
         }
     }
 }

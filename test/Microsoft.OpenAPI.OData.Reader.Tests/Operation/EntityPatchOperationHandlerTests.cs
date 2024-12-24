@@ -17,19 +17,22 @@ namespace Microsoft.OpenApi.OData.Operation.Tests
         private EntityPatchOperationHandler _operationHandler = new EntityPatchOperationHandler();
 
         [Theory]
-        [InlineData(true)]
-        [InlineData(false)]
-        public void CreateEntityPatchOperationReturnsCorrectOperation(bool enableOperationId)
+        [InlineData(true, true)]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        [InlineData(false, false)]
+        public void CreateEntityPatchOperationReturnsCorrectOperation(bool enableOperationId, bool useHTTPStatusCodeClass2XX)
         {
             // Arrange
             IEdmModel model = EntitySetGetOperationHandlerTests.GetEdmModel("");
             IEdmEntitySet entitySet = model.EntityContainer.FindEntitySet("Customers");
             OpenApiConvertSettings settings = new OpenApiConvertSettings
             {
-                EnableOperationId = enableOperationId
+                EnableOperationId = enableOperationId,
+                UseSuccessStatusCodeRange = useHTTPStatusCodeClass2XX
             };
             ODataContext context = new ODataContext(model, settings);
-            ODataPath path = new ODataPath(new ODataNavigationSourceSegment(entitySet), new ODataKeySegment(entitySet.EntityType()));
+            ODataPath path = new ODataPath(new ODataNavigationSourceSegment(entitySet), new ODataKeySegment(entitySet.EntityType));
 
             // Act
             var patch = _operationHandler.CreateOperation(context, path);
@@ -43,13 +46,23 @@ namespace Microsoft.OpenApi.OData.Operation.Tests
             Assert.Equal("Customers.Customer", tag.Name);
 
             Assert.NotNull(patch.Parameters);
-            Assert.Equal(1, patch.Parameters.Count);
+            Assert.Single(patch.Parameters);
 
             Assert.NotNull(patch.RequestBody);
 
             Assert.NotNull(patch.Responses);
             Assert.Equal(2, patch.Responses.Count);
-            Assert.Equal(new[] { "204", "default" }, patch.Responses.Select(r => r.Key));
+            var statusCode = useHTTPStatusCodeClass2XX ? "2XX" : "204";
+            Assert.Equal(new[] { statusCode, "default" }, patch.Responses.Select(r => r.Key));
+
+            if (useHTTPStatusCodeClass2XX)
+            {
+                Assert.Single(patch.Responses[statusCode].Content);
+            }
+            else
+            {
+                Assert.Empty(patch.Responses[statusCode].Content);
+            }
 
             if (enableOperationId)
             {
@@ -127,7 +140,7 @@ namespace Microsoft.OpenApi.OData.Operation.Tests
             ODataContext context = new ODataContext(model);
             IEdmEntitySet customers = model.EntityContainer.FindEntitySet("Customers");
             Assert.NotNull(customers); // guard
-            ODataPath path = new ODataPath(new ODataNavigationSourceSegment(customers), new ODataKeySegment(customers.EntityType()));
+            ODataPath path = new ODataPath(new ODataNavigationSourceSegment(customers), new ODataKeySegment(customers.EntityType));
 
             // Act
             var patch = _operationHandler.CreateOperation(context, path);

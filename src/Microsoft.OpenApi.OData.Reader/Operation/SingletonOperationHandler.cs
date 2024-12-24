@@ -8,6 +8,7 @@ using Microsoft.OpenApi.Any;
 using Microsoft.OpenApi.Models;
 using Microsoft.OpenApi.OData.Common;
 using Microsoft.OpenApi.OData.Edm;
+using Microsoft.OpenApi.OData.Vocabulary.Core;
 
 namespace Microsoft.OpenApi.OData.Operation
 {
@@ -39,7 +40,7 @@ namespace Microsoft.OpenApi.OData.Operation
             // For example: "Me.User"
             OpenApiTag tag = new OpenApiTag
             {
-                Name = Singleton.Name + "." + Singleton.EntityType().Name,
+                Name = Singleton.Name + "." + Singleton.EntityType.Name,
             };
 
             // Use an extension for TOC (Table of Content)
@@ -59,6 +60,25 @@ namespace Microsoft.OpenApi.OData.Operation
             operation.Extensions.Add(Constants.xMsDosOperationType, new OpenApiString("operation"));
 
             base.SetExtensions(operation);
+        }
+
+        /// <inheritdoc/>
+        protected override void SetExternalDocs(OpenApiOperation operation)
+        {
+            if (Context.Settings.ShowExternalDocs)
+            {
+                var externalDocs = Context.Model.GetLinkRecord(TargetPath, CustomLinkRel) ??
+                    Context.Model.GetLinkRecord(Singleton, CustomLinkRel);
+
+                if (externalDocs != null)
+                {
+                    operation.ExternalDocs = new OpenApiExternalDocs()
+                    {
+                        Description = CoreConstants.ExternalDocsDescription,
+                        Url = externalDocs.Href
+                    };
+                }
+            }
         }
     }
 }
